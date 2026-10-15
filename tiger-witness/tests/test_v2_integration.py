@@ -43,12 +43,20 @@ async def v2(client, tmp_path_factory):
     api.state["services"] = Services(http_transport=tr, resolve=lambda h: ["93.184.216.34"], rail=payments.MockRail(),
                                      smtp_send=lambda cfg, msg: SENT_MAIL.append(msg),
                                      files_root=str(tmp_path_factory.mktemp("files")))
-    api.state.pop("agent", None)
     from witness import channels
+    from witness.runtime import Agent
+    api.state["agent"] = Agent(api.state["pool"], api.state["provider"], api.state["services"])
     api.state["senders"] = {"telegram": channels.TelegramSender("TKN", tr),
                             "whatsapp": channels.WhatsAppSender("WAT", "PID", tr),
                             "imessage": channels.BlueBubblesSender("https://mac.example", "pw", tr)}
     yield client
+
+
+async def drain():
+    """Run the durable-queue worker until no jobs remain (webhooks only enqueue)."""
+    from witness import jobs, worker
+    p = api.state["pool"]
+    return await jobs.Worker(p, worker.handlers(p, api.state["agent"], api.state["senders"])).drain()
 
 
 async def new_user(c, name="v2user"):
@@ -259,7 +267,7 @@ async def test_multilingual_reply(v2):
     assert res["lang"] == "es"
     res = await chat(v2, h, "remember that నేను శాకాహారిని")
     assert res["lang"] in ("te", "en")
-    res = await chat(v2, h, "Pay $5 at x.example por favor")
+    res = await chat(v2, h, "Por favor, pay $5 to x.example, gracias")
     assert res["lang"] == "es" and res["reply"].startswith("No lo hice")
 
 
@@ -276,7 +284,10 @@ async def test_telegram_link_chat_and_button_approval(v2, monkeypatch):
     monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "tgs")
     h, uid = await new_user(v2, "tg")
     code = (await v2.post("/api/v2/channels/link-code", json={"channel": "telegram"}, headers=h)).json()["code"]
-    hook = lambda upd, s="tgs": v2.post("/channels/telegram/webhook", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": s})  # noqa: E731
+    async def hook(upd, s="tgs"):
+        r = await v2.post("/channels/telegram/webhook", json=upd, headers={"X-Telegram-Bot-Api-Secret-Token": s})
+        await drain()
+        return r
     assert (await hook({"message": {"chat": {"id": 777}, "text": "hi"}}, "wrong")).status_code == 401
     CHAN_SENT.clear()
     await hook({"message": {"chat": {"id": 777}, "text": f"/start {code}"}})
@@ -306,8 +317,10 @@ async def test_whatsapp_webhook_flow(v2, monkeypatch):
         raw = json.dumps({"entry": [{"changes": [{"value": {"messages": [{"from": "15550009999", "type": "text",
                                                                           "text": {"body": text}}]}}]}]}).encode()
         sig = "sha256=" + hmac.new(b"as", raw, hashlib.sha256).hexdigest()
-        return await v2.post("/channels/whatsapp/webhook", content=raw, headers={"X-Hub-Signature-256": sig,
-                                                                                 "content-type": "application/json"})
+        r = await v2.post("/channels/whatsapp/webhook", content=raw, headers={"X-Hub-Signature-256": sig,
+                                                                              "content-type": "application/json"})
+        await drain()
+        return r
     CHAN_SENT.clear()
     assert (await send(f"link {code}")).status_code == 200
     await send("Bitte merke dir, dass ich Milch hasse")  # de, no tool -> chat reply
@@ -323,8 +336,10 @@ async def test_imessage_relay_flow_with_text_approval(v2, monkeypatch):
     guid = "iMessage;-;+15557770000"
 
     async def send(text, me=False):
-        return await v2.post("/channels/imessage/webhook", params={"token": "imt"},
-                             json={"type": "new-message", "data": {"text": text, "isFromMe": me, "chats": [{"guid": guid}]}})
+        r = await v2.post("/channels/imessage/webhook", params={"token": "imt"},
+                          json={"type": "new-message", "data": {"text": text, "isFromMe": me, "chats": [{"guid": guid}]}})
+        await drain()
+        return r
     assert (await v2.post("/channels/imessage/webhook", params={"token": "bad"}, json={})).status_code == 401
     CHAN_SENT.clear()
     await send(f"link {code}")

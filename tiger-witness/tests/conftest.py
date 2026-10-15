@@ -5,6 +5,7 @@ ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 sys.path.insert(0, ROOT)
 os.environ.setdefault("WITNESS_SIGNING_KEY", "test-signing-key-0123456789abcdef0123")
 os.environ.setdefault("LOG_FORMAT", "text")
+os.environ.setdefault("WITNESS_EMBEDDINGS", "hashed")  # fast default; test_v3 runs the real local model
 for _k in ("WITNESS_RATE_PER_MIN", "WITNESS_RATE_BURST", "WITNESS_LOGIN_RATE_PER_MIN", "WITNESS_LOGIN_BURST"):
     os.environ.setdefault(_k, "100000")
 TEST_DB = os.environ.get("TEST_DB_URL")
