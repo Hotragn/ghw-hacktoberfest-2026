@@ -4,6 +4,9 @@ ENV PYTHONDONTWRITEBYTECODE=1 PYTHONUNBUFFERED=1 PIP_NO_CACHE_DIR=1 LOG_FORMAT=j
 WORKDIR /app
 COPY requirements.txt .
 RUN pip install -r requirements.txt
+# Bake the default open-source embedding model into the image (the API container runs read-only).
+ENV WITNESS_MODEL_CACHE=/app/models
+RUN python -c "from fastembed import TextEmbedding; TextEmbedding('sentence-transformers/all-MiniLM-L6-v2', cache_dir='/app/models')"
 COPY tigerkit.py tigerprod.py ./
 COPY witness ./witness
 COPY sql ./sql

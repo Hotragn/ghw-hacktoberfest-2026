@@ -34,6 +34,10 @@ services:
       WITNESS_SIGNING_KEY: ${WITNESS_SIGNING_KEY:?set WITNESS_SIGNING_KEY}
       WITNESS_ENV: ${WITNESS_ENV:-dev}
       WITNESS_COOKIE_SECURE: ${WITNESS_COOKIE_SECURE:-false}
+      WITNESS_RP_ID: ${WITNESS_RP_ID:-localhost}
+      WITNESS_ORIGIN: ${WITNESS_ORIGIN:-http://localhost:8103}
+      WITNESS_REQUIRE_PASSKEY: ${WITNESS_REQUIRE_PASSKEY:-false}
+      WITNESS_EMBEDDINGS: ${WITNESS_EMBEDDINGS:-local}
       WITNESS_LLM_BASE_URL: ${WITNESS_LLM_BASE_URL:-}
       WITNESS_LLM_API_KEY: ${WITNESS_LLM_API_KEY:-}
       WITNESS_LLM_MODEL: ${WITNESS_LLM_MODEL:-gpt-4o-mini}
@@ -55,6 +59,34 @@ services:
 volumes:
   witness_db: {}
   witness_files: {}
+  # Durable-queue worker for channel messages and re-embedding (scale with --scale worker=N; SKIP LOCKED).
+  worker:
+    build: .
+    command: ["python", "-m", "witness.worker"]
+    environment:
+      TIGER_DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-localdev}@db:5432/tsdb
+      WITNESS_SIGNING_KEY: ${WITNESS_SIGNING_KEY:?set WITNESS_SIGNING_KEY}
+      WITNESS_LLM_BASE_URL: ${WITNESS_LLM_BASE_URL:-}
+      WITNESS_LLM_API_KEY: ${WITNESS_LLM_API_KEY:-}
+      WITNESS_LLM_MODEL: ${WITNESS_LLM_MODEL:-gpt-4o-mini}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      IMESSAGE_BLUEBUBBLES_URL: ${IMESSAGE_BLUEBUBBLES_URL:-}
+      IMESSAGE_BLUEBUBBLES_PASSWORD: ${IMESSAGE_BLUEBUBBLES_PASSWORD:-}
+      WITNESS_PUBLIC_URL: ${WITNESS_PUBLIC_URL:-http://localhost:8103}
+      WITNESS_FILES_ROOT: /data/files
+    volumes: [witness_files:/data/files]
+    depends_on: { migrate: { condition: service_completed_successfully } }
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+  # Optional local open-source LLM (OpenAI-compatible) for running without a hosted key:
+  #   docker compose --profile local-llm up llm  then set WITNESS_LLM_BASE_URL=http://llm:8080/v1 WITNESS_LLM_API_KEY=local
+  llm:
+    image: ghcr.io/ggml-org/llama.cpp:server
+    profiles: ["local-llm"]
+    command: ["-hf", "Qwen/Qwen2.5-7B-Instruct-GGUF:Q4_K_M", "--jinja", "--host", "0.0.0.0", "--port", "8080", "-c", "8192"]
+    ports: ["8090:8080"]
   # Run the full test suite against the local Timescale:  docker compose --profile test run --rm test
   test:
     build: .
