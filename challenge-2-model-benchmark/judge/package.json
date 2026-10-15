@@ -1,0 +1,11 @@
+{
+  "name": "challenge-2-semver-judge",
+  "private": true,
+  "description": "Neutral evaluation of the challenge-2 SemVer implementations.",
+  "scripts": {
+    "judge": "node judge.js"
+  },
+  "devDependencies": {
+    "semver": "7.8.5"
+  }
+}
