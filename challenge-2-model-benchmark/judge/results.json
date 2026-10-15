@@ -1,0 +1,724 @@
+{
+  "seed": 20261015,
+  "npmSemver": "7.8.5",
+  "compareCases": 20000,
+  "maxCases": 20000,
+  "comparePairsWithPrerelease": 14978,
+  "comparePairsWithBuild": 12782,
+  "maxClassCounts": {
+    "exact": 2500,
+    "caret": 2500,
+    "tilde": 2500,
+    "gte": 2000,
+    "lt": 2000,
+    "xrange": 2500,
+    "hyphen": 2000,
+    "gt": 1000,
+    "lte": 1000,
+    "and": 1000,
+    "or": 1000
+  },
+  "agreement": {
+    "compareVersions": "same return value in {-1, 0, 1}; a throw or any other return is a mismatch",
+    "maxSatisfying": "both null, or both strings that npm semver.compare treats as equal (build metadata ignored). Exact string equality is recorded separately."
+  },
+  "models": {
+    "composer-2.5": {
+      "loc": 328,
+      "testLoc": 158,
+      "exports": {
+        "keys": [
+          "compareVersions",
+          "maxSatisfying"
+        ],
+        "compareKey": "compareVersions",
+        "maxKey": "maxSatisfying",
+        "renamed": false
+      },
+      "ownTests": {
+        "passed": 27,
+        "failed": 0,
+        "total": 27,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "summaryFound": true,
+        "elapsedMs": 32,
+        "stderrTail": ""
+      },
+      "crossTests": {
+        "composer-2.5": {
+          "passed": 27,
+          "failed": 0,
+          "total": 27,
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 28,
+          "stderrTail": ""
+        },
+        "claude-sonnet-5.5": {
+          "passed": 23,
+          "failed": 15,
+          "total": 38,
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 31,
+          "stderrTail": ""
+        },
+        "grok-4.7": {
+          "passed": 16,
+          "failed": 20,
+          "total": 36,
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 29,
+          "stderrTail": "    at Module._compile (node:internal/modules/cjs/loader:1554:14)\n    at Object..js (node:internal/modules/cjs/loader:1706:10)\n    at Module.load (node:internal/modules/cjs/loader:1289:32)\n    at Function._load (node:internal/modules/cjs/loader:1108:12)\n    at TracingChannel.traceSync (node:diagnostics_channel:322:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:220:24)\n    at Function.executeUserEntryPoint [as runMain] (node:internal/modules/run_main:170:5)\n"
+        }
+      },
+      "crossPassed": 66,
+      "crossTotal": 101,
+      "crossComplete": true,
+      "fuzzMs": 623,
+      "fuzz": {
+        "compareVersions": {
+          "agree": 20000,
+          "total": 20000,
+          "pct": "100.000",
+          "throws": 0,
+          "mismatches": []
+        },
+        "maxSatisfying": {
+          "agree": 13727,
+          "exact": 13727,
+          "total": 20000,
+          "pct": "68.635",
+          "exactPct": "68.635",
+          "throws": 0,
+          "promptForms": {
+            "agree": 11616,
+            "total": 16000,
+            "pct": "72.600"
+          },
+          "additionalForms": {
+            "agree": 2111,
+            "total": 4000,
+            "pct": "52.775"
+          },
+          "byClass": {
+            "exact": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "caret": {
+              "agree": 1903,
+              "total": 2500,
+              "pct": "76.120"
+            },
+            "tilde": {
+              "agree": 1816,
+              "total": 2500,
+              "pct": "72.640"
+            },
+            "gte": {
+              "agree": 1322,
+              "total": 2000,
+              "pct": "66.100"
+            },
+            "lt": {
+              "agree": 698,
+              "total": 2000,
+              "pct": "34.900"
+            },
+            "xrange": {
+              "agree": 1789,
+              "total": 2500,
+              "pct": "71.560"
+            },
+            "hyphen": {
+              "agree": 1588,
+              "total": 2000,
+              "pct": "79.400"
+            },
+            "gt": {
+              "agree": 646,
+              "total": 1000,
+              "pct": "64.600"
+            },
+            "lte": {
+              "agree": 800,
+              "total": 1000,
+              "pct": "80.000"
+            },
+            "and": {
+              "agree": 654,
+              "total": 1000,
+              "pct": "65.400"
+            },
+            "or": {
+              "agree": 11,
+              "total": 1000,
+              "pct": "1.100"
+            }
+          },
+          "mismatches": [
+            {
+              "kind": "caret",
+              "range": "^3.1.3-rc5",
+              "versions": [
+                "3.1.2",
+                "2.0.7",
+                "2.3.3-15.pre+rc3",
+                "3.0.0",
+                "4.0.0",
+                "3.1.4",
+                "3.1.3-alpha.1",
+                "2.0.3-2.pre.alpha1",
+                "3.1.3-rc.1",
+                "3.2.0",
+                "3.3.4",
+                "3.1.3+736.rc3"
+              ],
+              "npm": "3.3.4",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^1",
+              "versions": [
+                "0.3.4",
+                "1.2.0",
+                "1.3.2",
+                "1.4.0",
+                "1.3.1-alpha.1",
+                "3.0.1-pre.pre2.12+alpha3",
+                "2.0.0",
+                "1.3.1-rc.1",
+                "1.3.1",
+                "1.3.1-alpha",
+                "2.0.83-beta2.beta6",
+                "1.5.9-alpha1.11.1+beta"
+              ],
+              "npm": "1.4.0",
+              "impl": "1.5.9-alpha1.11.1+beta",
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^0.6.2-7",
+              "versions": [
+                "17.2.1-17+758.338",
+                "4.4.4",
+                "0.6.2-7",
+                "0.5.0",
+                "13.14.2+beta",
+                "0.6.1",
+                "0.6.2-rc.1+beta3.725",
+                "17.0.1+beta",
+                "0.6.3",
+                "4.6.6+beta.49",
+                "0.6.2-rc.1",
+                "0.6.2"
+              ],
+              "npm": "0.6.3",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^0.6.2-dev",
+              "versions": [
+                "0.6.2-rc.1",
+                "0.6.2-dev",
+                "0.6.2-alpha",
+                "0.5.0",
+                "0.6.2",
+                "3.0.4+851",
+                "3.2.5-14.alpha9.beta0",
+                "0.6.1",
+                "3.0.8-2.pre1+847.beta",
+                "0.6.3",
+                "1.0.1",
+                "1.0.0"
+              ],
+              "npm": "0.6.3",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^5.11.0-16.12.12",
+              "versions": [
+                "5.10.0",
+                "5.12.0",
+                "5.11.0-16.12.12",
+                "5.11.0+188",
+                "5.11.0-alpha.1",
+                "3.47.11+840",
+                "5.11.1",
+                "5.11.0-alpha",
+                "5.11.0-rc.1",
+                "5.11.0",
+                "8.10.2",
+                "6.0.0"
+              ],
+              "npm": "5.12.0",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^0",
+              "versions": [
+                "10.5.0-16.dev.2+508",
+                "0.62.0",
+                "0.61.3-alpha.1",
+                "2.4.27",
+                "0.61.3-alpha",
+                "0.60.0",
+                "0.21.5",
+                "0.61.2",
+                "0.61.3-rc.1",
+                "1.0.0",
+                "0.61.4",
+                "0.61.3"
+              ],
+              "npm": "0.62.0",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^4.1.2-alpha",
+              "versions": [
+                "4.1.2",
+                "4.1.1",
+                "4.0.0",
+                "2.1.11-18.0",
+                "1.4.76-alpha",
+                "14.23.0-4.1.dev7",
+                "4.1.2-rc.1",
+                "4.1.2-alpha",
+                "4.1.2-alpha.1",
+                "5.0.0",
+                "4.2.0",
+                "4.1.2+dev.427"
+              ],
+              "npm": "4.2.0",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^11.0.2-12.8.beta2",
+              "versions": [
+                "11.0.2-12.8.beta2",
+                "3.0.11",
+                "3.2.0-15.alpha8.dev1",
+                "9.14.12+dev.pre3",
+                "11.0.2-alpha.1",
+                "11.0.2-alpha",
+                "12.0.0",
+                "11.0.2+alpha4",
+                "11.1.0",
+                "11.0.3",
+                "11.0.1",
+                "11.0.2-rc.1"
+              ],
+              "npm": "11.1.0",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^2.3.14",
+              "versions": [
+                "2.70.21-beta1.17",
+                "9.0.0-4.beta",
+                "2.3.14-alpha.1",
+                "2.4.0",
+                "2.3.13",
+                "29.1.2-alpha.6.16",
+                "2.3.14-rc.1",
+                "2.3.15",
+                "13.2.3",
+                "2.3.14-alpha",
+                "2.2.0",
+                "2.3.14+alpha1.784"
+              ],
+              "npm": "2.4.0",
+              "impl": "2.70.21-beta1.17",
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^2.4.14-rc",
+              "versions": [
+                "2.3.1",
+                "2.6.12+alpha3",
+                "2.4.13",
+                "2.4.14-alpha",
+                "2.3.3",
+                "2.4.14-rc",
+                "2.5.0",
+                "2.4.15",
+                "2.4.14-alpha.1",
+                "3.0.0",
+                "2.3.0",
+                "2.4.14"
+              ],
+              "npm": "2.6.12+alpha3",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^12.8.2-alpha.19.alpha3",
+              "versions": [
+                "3.1.69-pre7+beta1",
+                "12.8.1",
+                "12.8.2-alpha.1",
+                "1.0.14",
+                "12.7.0",
+                "8.2.4",
+                "12.8.2-alpha.19.alpha3",
+                "12.8.2",
+                "0.5.3-pre+647",
+                "13.0.0",
+                "4.3.4",
+                "12.9.0"
+              ],
+              "npm": "12.9.0",
+              "impl": null,
+              "error": null
+            },
+            {
+              "kind": "caret",
+              "range": "^3",
+              "versions": [
+                "3.2.17-rc.1+165",
+                "7.0.1+dev.675",
+                "3.2.18",
+                "3.6.10-rc.8.rc1",
+                "3.2.17-alpha.1",
+                "4.3.2-alpha.12+589",
+                "3.1.0",
+                "4.0.0",
+                "1.1.48",
+                "1.65.4",
+                "3.2.17",
+                "3.3.0"
+              ],
+              "npm": "3.3.0",
+              "impl": "3.6.10-rc.8.rc1",
+              "error": null
+            }
+          ]
+        }
+      }
+    },
+    "claude-sonnet-5.5": {
+      "loc": 241,
+      "testLoc": 223,
+      "exports": {
+        "keys": [
+          "compareVersions",
+          "maxSatisfying"
+        ],
+        "compareKey": "compareVersions",
+        "maxKey": "maxSatisfying",
+        "renamed": false
+      },
+      "ownTests": {
+        "passed": 38,
+        "failed": 0,
+        "total": 38,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "summaryFound": true,
+        "elapsedMs": 30,
+        "stderrTail": ""
+      },
+      "crossTests": {
+        "composer-2.5": {
+          "passed": 27,
+          "failed": 0,
+          "total": 27,
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 24,
+          "stderrTail": ""
+        },
+        "claude-sonnet-5.5": {
+          "passed": 38,
+          "failed": 0,
+          "total": 38,
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 25,
+          "stderrTail": ""
+        },
+        "grok-4.7": {
+          "passed": 33,
+          "failed": 3,
+          "total": 36,
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 26,
+          "stderrTail": "    at parseRange (/workspace/challenge-2-model-benchmark/claude-sonnet-5.5/semver.js:188:28)\n    at maxSatisfying (/workspace/challenge-2-model-benchmark/claude-sonnet-5.5/semver.js:222:16)\n    at /workspace/challenge-2-model-benchmark/grok-4.7/semver.test.js:328:22\n    at test (/workspace/challenge-2-model-benchmark/grok-4.7/semver.test.js:14:5)\n    at Object.<anonymous> (/workspace/challenge-2-model-benchmark/grok-4.7/semver.test.js:327:1)\n    at Module._compile (node:internal/modules/cjs/loader:1554:14)\n    at Object..js (node:internal/modules/cjs/loader:1706:10)\n"
+        }
+      },
+      "crossPassed": 98,
+      "crossTotal": 101,
+      "crossComplete": true,
+      "fuzzMs": 425,
+      "fuzz": {
+        "compareVersions": {
+          "agree": 20000,
+          "total": 20000,
+          "pct": "100.000",
+          "throws": 0,
+          "mismatches": []
+        },
+        "maxSatisfying": {
+          "agree": 20000,
+          "exact": 20000,
+          "total": 20000,
+          "pct": "100.000",
+          "exactPct": "100.000",
+          "throws": 0,
+          "promptForms": {
+            "agree": 16000,
+            "total": 16000,
+            "pct": "100.000"
+          },
+          "additionalForms": {
+            "agree": 4000,
+            "total": 4000,
+            "pct": "100.000"
+          },
+          "byClass": {
+            "exact": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "caret": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "tilde": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "gte": {
+              "agree": 2000,
+              "total": 2000,
+              "pct": "100.000"
+            },
+            "lt": {
+              "agree": 2000,
+              "total": 2000,
+              "pct": "100.000"
+            },
+            "xrange": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "hyphen": {
+              "agree": 2000,
+              "total": 2000,
+              "pct": "100.000"
+            },
+            "gt": {
+              "agree": 1000,
+              "total": 1000,
+              "pct": "100.000"
+            },
+            "lte": {
+              "agree": 1000,
+              "total": 1000,
+              "pct": "100.000"
+            },
+            "and": {
+              "agree": 1000,
+              "total": 1000,
+              "pct": "100.000"
+            },
+            "or": {
+              "agree": 1000,
+              "total": 1000,
+              "pct": "100.000"
+            }
+          },
+          "mismatches": []
+        }
+      }
+    },
+    "grok-4.7": {
+      "loc": 400,
+      "testLoc": 340,
+      "exports": {
+        "keys": [
+          "compareVersions",
+          "maxSatisfying"
+        ],
+        "compareKey": "compareVersions",
+        "maxKey": "maxSatisfying",
+        "renamed": false
+      },
+      "ownTests": {
+        "passed": 36,
+        "failed": 0,
+        "total": 36,
+        "exitCode": 0,
+        "signal": null,
+        "timedOut": false,
+        "summaryFound": true,
+        "elapsedMs": 30,
+        "stderrTail": ""
+      },
+      "crossTests": {
+        "composer-2.5": {
+          "passed": 27,
+          "failed": 0,
+          "total": 27,
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 24,
+          "stderrTail": ""
+        },
+        "claude-sonnet-5.5": {
+          "passed": 35,
+          "failed": 3,
+          "total": 38,
+          "exitCode": 1,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 24,
+          "stderrTail": ""
+        },
+        "grok-4.7": {
+          "passed": 36,
+          "failed": 0,
+          "total": 36,
+          "exitCode": 0,
+          "signal": null,
+          "timedOut": false,
+          "summaryFound": true,
+          "elapsedMs": 27,
+          "stderrTail": ""
+        }
+      },
+      "crossPassed": 98,
+      "crossTotal": 101,
+      "crossComplete": true,
+      "fuzzMs": 495,
+      "fuzz": {
+        "compareVersions": {
+          "agree": 20000,
+          "total": 20000,
+          "pct": "100.000",
+          "throws": 0,
+          "mismatches": []
+        },
+        "maxSatisfying": {
+          "agree": 20000,
+          "exact": 20000,
+          "total": 20000,
+          "pct": "100.000",
+          "exactPct": "100.000",
+          "throws": 0,
+          "promptForms": {
+            "agree": 16000,
+            "total": 16000,
+            "pct": "100.000"
+          },
+          "additionalForms": {
+            "agree": 4000,
+            "total": 4000,
+            "pct": "100.000"
+          },
+          "byClass": {
+            "exact": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "caret": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "tilde": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "gte": {
+              "agree": 2000,
+              "total": 2000,
+              "pct": "100.000"
+            },
+            "lt": {
+              "agree": 2000,
+              "total": 2000,
+              "pct": "100.000"
+            },
+            "xrange": {
+              "agree": 2500,
+              "total": 2500,
+              "pct": "100.000"
+            },
+            "hyphen": {
+              "agree": 2000,
+              "total": 2000,
+              "pct": "100.000"
+            },
+            "gt": {
+              "agree": 1000,
+              "total": 1000,
+              "pct": "100.000"
+            },
+            "lte": {
+              "agree": 1000,
+              "total": 1000,
+              "pct": "100.000"
+            },
+            "and": {
+              "agree": 1000,
+              "total": 1000,
+              "pct": "100.000"
+            },
+            "or": {
+              "agree": 1000,
+              "total": 1000,
+              "pct": "100.000"
+            }
+          },
+          "mismatches": []
+        }
+      }
+    }
+  }
+}
