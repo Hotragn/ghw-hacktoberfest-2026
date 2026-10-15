@@ -241,31 +241,35 @@
     };
   }
 
-  async function searchIssues(owner, repo, label, token, signal, unassignedOnly) {
-    var safeLabel = String(label).replace(/["\\]/g, "");
-    var q = "repo:" + owner + "/" + repo + " is:issue is:open label:\"" + safeLabel + "\"";
-    if (unassignedOnly) q += " no:assignee";
-    var path = "/search/issues?q=" + encodeURIComponent(q) + "&per_page=30&sort=created&order=desc";
+  async function listByLabel(owner, repo, label, token, signal) {
+    var path = "/repos/" + owner + "/" + repo + "/issues?state=open&sort=created&direction=desc&per_page=100&labels=" + encodeURIComponent(label);
     var res = await gh(path, { token: token, signal: signal });
+    var body = Array.isArray(res.body) ? res.body : [];
+    var issuesOnly = body.filter(function (item) { return item && !item.pull_request; });
     return {
-      total: Number(res.body && res.body.total_count),
-      items: res.body && Array.isArray(res.body.items) ? res.body.items : [],
-      incomplete: Boolean(res.body && res.body.incomplete_results),
+      total: issuesOnly.length,
+      truncated: Boolean(nextPath(res.link)),
+      items: issuesOnly,
       limit: res.limit,
     };
   }
 
   function pickResponseSample(issues, pulls) {
-    var issueList = (Array.isArray(issues) ? issues : []).filter(function (item) {
-      return item && !item.pull_request && item.comments > 0 && item.number;
+    var issueThreads = [];
+    var pullThreads = [];
+    (Array.isArray(issues) ? issues : []).forEach(function (item) {
+      if (!item || !item.number || Number(item.comments) <= 0) return;
+      if (item.pull_request) pullThreads.push(item);
+      else issueThreads.push(item);
     });
-    var pullList = (Array.isArray(pulls) ? pulls : []).filter(function (item) {
-      return item && item.comments > 0 && item.number;
+    (Array.isArray(pulls) ? pulls : []).forEach(function (item) {
+      if (!item || !item.number || item.comments === 0) return;
+      pullThreads.push(item);
     });
     var chosen = [];
     var seen = {};
     function add(item) {
-      if (chosen.length >= 5 || !item || seen[item.number]) return;
+      if (!item || chosen.length >= 5 || seen[item.number]) return;
       seen[item.number] = true;
       chosen.push({
         number: item.number,
@@ -273,10 +277,10 @@
         userLogin: item.user && item.user.login,
       });
     }
-    issueList.slice(0, 3).forEach(add);
-    pullList.slice(0, 2).forEach(add);
-    issueList.forEach(add);
-    pullList.forEach(add);
+    issueThreads.slice(0, 3).forEach(add);
+    pullThreads.slice(0, 2).forEach(add);
+    issueThreads.forEach(add);
+    pullThreads.forEach(add);
     return chosen;
   }
 
@@ -328,7 +332,7 @@
     var settled = await Promise.allSettled([
       gh("/repos/" + owner + "/" + repo + "/community/profile", { token: token, signal: signal }),
       fetchLabels(owner, repo, token, signal),
-      gh("/repos/" + owner + "/" + repo + "/issues?state=all&sort=created&direction=desc&per_page=15", { token: token, signal: signal }),
+      gh("/repos/" + owner + "/" + repo + "/issues?state=all&sort=created&direction=desc&per_page=30", { token: token, signal: signal }),
       gh("/repos/" + owner + "/" + repo + "/pulls?state=all&sort=created&direction=desc&per_page=10", { token: token, signal: signal }),
       gh("/repos/" + owner + "/" + repo + "/pulls?state=closed&sort=updated&direction=desc&per_page=30", { token: token, signal: signal }),
     ]);
@@ -341,6 +345,18 @@
       docsKnown = Boolean(docs);
     } else {
       note(settled[0].reason, "Community profile");
+    }
+    if (docsKnown && docs && !docs.hasIssueTemplates) {
+      try {
+        var templateRes = await gh("/repos/" + owner + "/" + repo + "/contents/.github/ISSUE_TEMPLATE", { token: token, signal: signal });
+        trackCore(limits, templateRes.limit);
+        var templateBody = templateRes.body;
+        var templateFiles = Array.isArray(templateBody) ? templateBody.length > 0 : Boolean(templateBody && templateBody.type);
+        if (templateFiles) docs.hasIssueTemplates = true;
+      } catch (err) {
+        if (isAbort(err)) throw err;
+        if (err && err.code !== "NOT_FOUND") note(err, "Issue templates");
+      }
     }
     if (!docsKnown && !(settled[0].status === "rejected" && settled[0].reason && settled[0].reason.code === "RATE_LIMIT")) {
       try {
@@ -398,39 +414,30 @@
       starter[key] = { name: grouped[key], count: grouped[key] ? null : 0 };
     });
     var issueItems = [];
-    var searchJobs = categories.filter(function (key) { return grouped[key]; });
-    var searchResults = await Promise.allSettled(searchJobs.map(function (key) {
-      return searchIssues(owner, repo, grouped[key], token, signal, false);
+    var labelJobs = categories.filter(function (key) { return grouped[key]; });
+    var labelResults = await Promise.allSettled(labelJobs.map(function (key) {
+      return listByLabel(owner, repo, grouped[key], token, signal);
     }));
-    var searchFailures = 0;
-    searchResults.forEach(function (result, index) {
-      var key = searchJobs[index];
+    var labelFailures = 0;
+    var starterCountsTruncated = false;
+    labelResults.forEach(function (result, index) {
+      var key = labelJobs[index];
       if (result.status === "fulfilled") {
         var total = result.value.total;
         starter[key].count = Number.isFinite(total) ? total : null;
+        if (result.value.truncated) starterCountsTruncated = true;
         issueItems = issueItems.concat(result.value.items);
-        if (result.value.incomplete) warnings.push("GitHub marked an issue search as incomplete, so a starter count may be low.");
+        trackCore(limits, result.value.limit);
+      } else if (result.reason && result.reason.code === "NOT_FOUND") {
+        starter[key].count = 0;
       } else {
-        searchFailures += 1;
+        labelFailures += 1;
         note(result.reason, "Starter issues");
       }
     });
-    if (!labelsLoaded && searchJobs.length && searchFailures === searchJobs.length) starter.known = false;
+    if (!labelsLoaded && labelJobs.length && labelFailures === labelJobs.length) starter.known = false;
 
     var ranked = scoring.rankStarterIssues(issueItems, Date.now());
-    if (ranked.length < 3 && searchFailures === 0) {
-      var followKeys = searchJobs.filter(function (key) { return Number(starter[key].count) > 0; });
-      if (followKeys.length) {
-        var follow = await Promise.allSettled(followKeys.map(function (key) {
-          return searchIssues(owner, repo, grouped[key], token, signal, true);
-        }));
-        follow.forEach(function (result) {
-          if (result.status === "fulfilled") issueItems = issueItems.concat(result.value.items);
-          else note(result.reason, "Unassigned starter issues");
-        });
-        ranked = scoring.rankStarterIssues(issueItems, Date.now());
-      }
-    }
 
     var samples = issuesOk || pullsOk ? pickResponseSample(issueBody, pullBody) : [];
     var response = { medianHours: null, hit: 0, checked: 0, known: issuesOk || pullsOk };
@@ -495,6 +502,7 @@
       hacktoberfestCount: starter.hacktoberfest.count,
       hacktoberfestLabelName: starter.hacktoberfest.name,
       starterCountsKnown: starter.known,
+      starterCountsTruncated: starterCountsTruncated,
       daysSinceLastPush: daysSince(repoBody.pushed_at),
       medianResponseHours: response.medianHours,
       responseSampleSize: response.hit,
@@ -771,7 +779,7 @@
       h("h2", {}, ["Three places to start"]),
       h("p", { class: "method" }, ["Unassigned issues with a starter label, few comments, and a recent opening date rank first."]),
       cards,
-      h("p", { class: "footnote" }, ["Recommendations come from the newest 30 open issues on each recognized label. Assigned issues are left out."]),
+      h("p", { class: "footnote" }, ["Recommendations come from the newest 100 open issues on each recognized label. Assigned issues and pull requests are left out."]),
       h("p", { class: "limit-note" }, [limitText]),
     ]);
 

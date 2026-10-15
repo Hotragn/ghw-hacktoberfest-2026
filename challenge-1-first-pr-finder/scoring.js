@@ -460,6 +460,10 @@
     if (positive >= 2) {
       detail += " Issues with more than one of these labels are counted in each tally.";
     }
+    detail += " Pull requests are not included.";
+    if (input.starterCountsTruncated) {
+      detail += " A label with more open items than the newest 100 is counted from that page only, so the tally may be low.";
+    }
     if (unavailable > 0) {
       detail += " " + unavailable + " label " + (unavailable === 1 ? "count" : "counts") + " unavailable, so this tally may be low.";
     }
