@@ -71,7 +71,7 @@ function parsePartial(input) {
   if (s === '*' || s === 'x' || s === 'X') {
     return { major: null, minor: null, patch: null, prerelease: [] };
   }
-  if (s.charAt(0) === 'v' || s.charAt(0) === 'V') {
+  if (s.charAt(0) === 'v') {
     s = s.slice(1);
     if (s === '') return null;
   }
@@ -87,27 +87,29 @@ function parsePartial(input) {
   var m = /^(x|X|\*|0|[1-9]\d*)(?:\.(x|X|\*|0|[1-9]\d*))?(?:\.(x|X|\*|0|[1-9]\d*))?(?:-(.+))?$/.exec(s);
   if (!m) return null;
 
+  var minorPresent = m[2] !== undefined;
+  var patchPresent = m[3] !== undefined;
   var major = wildcardToNull(m[1]);
-  var minor = m[2] === undefined ? null : wildcardToNull(m[2]);
-  var patch = m[3] === undefined ? null : wildcardToNull(m[3]);
+  var minor = minorPresent ? wildcardToNull(m[2]) : null;
+  var patch = patchPresent ? wildcardToNull(m[3]) : null;
 
   if (major === null) {
-    if ((m[2] !== undefined && minor !== null) || (m[3] !== undefined && patch !== null)) {
-      return null;
-    }
+    if ((minorPresent && minor !== null) || (patchPresent && patch !== null)) return null;
   }
-  if (minor === null && m[3] !== undefined && patch !== null) return null;
+  if (minor === null && patchPresent && patch !== null) return null;
 
   var prerelease = [];
   if (m[4] !== undefined) {
-    if (major === null || minor === null || patch === null) return null;
+    // A prerelease needs a written patch (`1.2.x-beta` is an x-range;
+    // `1.2-beta` is not a version). Wildcards ignore that suffix.
+    if (!patchPresent) return null;
     var ids = m[4].split('.');
     var i;
     for (i = 0; i < ids.length; i += 1) {
       if (!/^[0-9A-Za-z-]+$/.test(ids[i])) return null;
       if (isNumericId(ids[i]) && ids[i].length > 1 && ids[i].charAt(0) === '0') return null;
     }
-    prerelease = ids;
+    if (major !== null && minor !== null && patch !== null) prerelease = ids;
   }
 
   return { major: major, minor: minor, patch: patch, prerelease: prerelease };
@@ -247,20 +249,43 @@ function parseComparatorToken(token) {
 
   var partial = parsePartial(versionText);
   if (!partial) return null;
-  if (op === '=' && (partial.major === null || partial.minor === null || partial.patch === null)) {
-    return expandXRange(partial);
+  return expandOperatorPartial(op, partial);
+}
+
+function expandOperatorPartial(op, partial) {
+  var majorWild = partial.major === null;
+  var minorWild = majorWild || partial.minor === null;
+  var patchWild = minorWild || partial.patch === null;
+  if (op === '=' && patchWild) return expandXRange(partial);
+  if (!patchWild) {
+    return [comp(op, partial.major, partial.minor, partial.patch, partial.prerelease)];
+  }
+  if (majorWild) {
+    if (op === '>' || op === '<') return [comp('<', '0', '0', '0', ['0'])];
+    return [comp('>=', '0', '0', '0', [])];
   }
 
-  var pre = partial.major !== null && partial.minor !== null && partial.patch !== null
-    ? partial.prerelease
-    : [];
-  return [comp(
-    op,
-    partial.major === null ? '0' : partial.major,
-    partial.minor === null ? '0' : partial.minor,
-    partial.patch === null ? '0' : partial.patch,
-    pre
-  )];
+  var M = partial.major;
+  var m = minorWild ? '0' : partial.minor;
+  var p = '0';
+  if (op === '>') {
+    op = '>=';
+    if (minorWild) {
+      M = inc(M);
+      m = '0';
+    } else {
+      m = inc(m);
+    }
+  } else if (op === '<=') {
+    op = '<';
+    if (minorWild) {
+      M = inc(M);
+      m = '0';
+    } else {
+      m = inc(m);
+    }
+  }
+  return [comp(op, M, m, p, [])];
 }
 
 function normalizeOperators(alt) {

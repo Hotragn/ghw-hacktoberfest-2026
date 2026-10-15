@@ -125,12 +125,12 @@ test('numeric components beyond MAX_SAFE_INTEGER compare exactly', function () {
 
 test('optional v prefix and surrounding whitespace do not affect precedence', function () {
   assert.strictEqual(compareVersions('  v1.2.3  ', '1.2.3'), 0);
-  assert.strictEqual(compareVersions('V1.2.3-alpha+build', '1.2.3-alpha'), 0);
+  assert.strictEqual(compareVersions('v1.2.3-alpha+build', '1.2.3-alpha'), 0);
   assert.strictEqual(compareVersions('v2.0.0', '1.9.9'), 1);
 });
 
 test('invalid versions throw', function () {
-  var bad = ['1.2', '1', '01.0.0', '1.02.0', '1.0.0-01', '1.0.0-', '1.0.0+', '1.0.0-alpha.', '1.0.0-rc..1', 'not', '', '1.2.3.4', '1.2.x'];
+  var bad = ['1.2', '1', '01.0.0', '1.02.0', '1.0.0-01', '1.0.0-', '1.0.0+', '1.0.0-alpha.', '1.0.0-rc..1', 'not', '', '1.2.3.4', '1.2.x', 'V1.2.3'];
   bad.forEach(function (value) {
     assert.throws(function () {
       compareVersions(value, '1.0.0');
@@ -150,7 +150,9 @@ test('compare is symmetric on a mixed set', function () {
   var j;
   for (i = 0; i < list.length; i += 1) {
     for (j = 0; j < list.length; j += 1) {
-      assert.strictEqual(compareVersions(list[i], list[j]), -compareVersions(list[j], list[i]));
+      var forward = compareVersions(list[i], list[j]);
+      var backward = compareVersions(list[j], list[i]);
+      assert.strictEqual(forward + backward, 0);
     }
   }
 });
@@ -309,6 +311,23 @@ test('hyphen with extra spaces and v prefixes still includes both ends', functio
 
 test('build metadata on a hyphen endpoint does not change the bounds', function () {
   assert.strictEqual(maxSatisfying(['1.0.0+a', '1.5.0+b', '2.0.0+c', '2.0.1'], '1.0.0+build - 2.0.0+build'), '2.0.0+c');
+});
+
+test('inequality operators advance a partial version to the next omitted slot', function () {
+  assert.strictEqual(maxSatisfying(['1.2.9', '1.3.0', '2.0.0'], '>1.2.x'), '2.0.0');
+  assert.strictEqual(maxSatisfying(['1.2.0', '1.2.10', '1.3.0'], '<=1.2.x'), '1.2.10');
+  assert.strictEqual(maxSatisfying(['1.2.9', '1.3.0', '2.0.0'], '>1.2'), '2.0.0');
+  assert.strictEqual(maxSatisfying(['1.2.9', '1.3.0'], '<=1.2'), '1.2.9');
+  assert.strictEqual(maxSatisfying(['1.9.9', '2.0.0'], '>1'), '2.0.0');
+  assert.strictEqual(maxSatisfying(['1.9.9', '2.0.0'], '<=1'), '1.9.9');
+  assert.strictEqual(maxSatisfying(['1.2.0', '2.0.0'], '>=1.2.x'), '2.0.0');
+  assert.strictEqual(maxSatisfying(['1.1.9', '1.2.0'], '<1.2.x'), '1.1.9');
+});
+
+test('a prerelease on a wildcard is ignored and a prerelease without a patch is invalid', function () {
+  assert.strictEqual(maxSatisfying(['1.2.9', '1.3.0'], '1.2.x-beta'), '1.2.9');
+  assert.strictEqual(maxSatisfying(['1.2.0'], '1.2-beta'), null);
+  assert.strictEqual(maxSatisfying(['1.2.0'], '1.2.x-01'), null);
 });
 
 test('an exact prerelease version matches only itself, ignoring build', function () {
