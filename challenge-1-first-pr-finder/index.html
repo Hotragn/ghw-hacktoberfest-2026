@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>First PR Finder</title>
+  <meta name="description" content="Score how ready a GitHub repository is for a first-time contributor, then pick three starter issues.">
+  <script>
+    try {
+      var savedTheme = localStorage.getItem("first-pr-finder:theme");
+      var dark = savedTheme ? savedTheme === "dark" : window.matchMedia("(prefers-color-scheme: dark)").matches;
+      document.documentElement.setAttribute("data-theme", dark ? "dark" : "light");
+    } catch (err) {
+      document.documentElement.setAttribute("data-theme", "dark");
+    }
+  </script>
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,560;1,9..144,560&family=Outfit:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 48 48'%3E%3Ccircle cx='24' cy='24' r='18' fill='none' stroke='%23e39a4a' stroke-width='3'/%3E%3Cpath d='M24 8 L28.5 24 L24 20.5 L19.5 24 Z' fill='%23e39a4a'/%3E%3C/svg%3E">
+</head>
+<body>
+  <a class="skip" href="#result">Skip to results</a>
+  <div class="wrap">
+    <header class="site-header">
+      <div class="brand">
+        <svg class="logo" viewBox="0 0 48 48" aria-hidden="true">
+          <circle cx="24" cy="24" r="18" fill="none" stroke="currentColor" stroke-width="1.6"></circle>
+          <path d="M24 7.5 L29 24 L24 20 L19 24 Z" fill="currentColor"></path>
+          <path d="M24 40.5 L19 24 L24 28 L29 24 Z" fill="currentColor" opacity="0.4"></path>
+        </svg>
+        <div>
+          <p class="eyebrow">MLH Global Hack Week · Hacktoberfest</p>
+          <h1>First PR Finder</h1>
+        </div>
+      </div>
+      <button type="button" id="theme-toggle" class="ghost" aria-pressed="false">Theme</button>
+    </header>
+
+    <main>
+      <section class="panel query" aria-labelledby="query-title">
+        <div class="query-copy">
+          <h2 id="query-title">Is this repo ready for someone’s first pull request?</h2>
+          <p>Paste a GitHub URL or <span class="mono">owner/name</span>. The score is built in the open from public docs, starter labels, recent pushes, maintainer reply time, and merge ratio.</p>
+        </div>
+        <form id="finder-form">
+          <div class="field">
+            <label for="repo">Repository</label>
+            <div class="repo-row">
+              <input id="repo" name="repo" type="text" spellcheck="false" autocomplete="off" maxlength="300" placeholder="facebook/react" required>
+              <button type="submit" id="submit-btn" class="primary">Score this repo</button>
+            </div>
+          </div>
+          <div class="examples" role="group" aria-labelledby="examples-label">
+            <span id="examples-label">Try</span>
+            <button type="button" data-repo="facebook/react">facebook/react</button>
+            <button type="button" data-repo="nodejs/node">nodejs/node</button>
+            <button type="button" data-repo="vercel/next.js">vercel/next.js</button>
+          </div>
+          <p id="form-error" class="form-error" role="alert" hidden></p>
+          <details class="token">
+            <summary>Personal access token, optional</summary>
+            <label for="token">Token</label>
+            <input id="token" name="token" type="password" autocomplete="off" spellcheck="false" placeholder="github_pat_…">
+            <p class="hint">Stored only in this browser’s localStorage. Sent only to api.github.com. Never added to the share URL. Public read access is enough, and it lifts the unauthenticated limit of about 60 requests an hour.</p>
+            <button type="button" id="clear-token" class="ghost">Forget token</button>
+          </details>
+          <p id="token-status" class="hint"></p>
+        </form>
+      </section>
+
+      <p id="status" class="status" role="status" hidden></p>
+      <div id="result">
+        <section class="panel idle">
+          <p class="eyebrow">Contributor-readiness</p>
+          <h2>A place to start, or a trail with the signs missing.</h2>
+          <p>Nine signals add up to 100. A high score means a newcomer can find the door, a license, a starter issue, and a maintainer who writes back. It is not a judgment of the code.</p>
+          <ol class="band-list">
+            <li><strong>85+</strong> Ready for a first contribution</li>
+            <li><strong>70+</strong> Welcoming, with a few gaps</li>
+            <li><strong>50+</strong> Possible, but you will do some digging</li>
+            <li><strong>30+</strong> Thin onboarding</li>
+          </ol>
+        </section>
+      </div>
+    </main>
+
+    <footer class="site-footer">
+      <p>Scores come from the public GitHub REST API. Share a result with <span class="mono">?repo=owner/name</span>. Open this folder through a local server so the browser can call the API.</p>
+    </footer>
+  </div>
+  <script src="scoring.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
