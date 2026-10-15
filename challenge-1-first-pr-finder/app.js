@@ -432,8 +432,8 @@
       }
     }
 
-    var samples = listsOk || pullsOk ? pickResponseSample(issueBody, pullBody) : [];
-    var response = { medianHours: null, hit: 0, checked: 0, known: listsOk || pullsOk };
+    var samples = issuesOk || pullsOk ? pickResponseSample(issueBody, pullBody) : [];
+    var response = { medianHours: null, hit: 0, checked: 0, known: issuesOk || pullsOk };
     if (samples.length) {
       var commentResults = await Promise.allSettled(samples.map(function (sample) {
         return gh(
