@@ -9,13 +9,17 @@ import os
 import sys
 from datetime import datetime, timezone
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-from tigerkit import text_embedding, vec_literal  # noqa: E402
+from witness import embeddings  # noqa: E402
 
 KINDS = ("fact", "preference", "person", "place", "episode")
 
 
-def embed(text: str) -> str:
-    return vec_literal(text_embedding(text))
+async def _vec(conn, text: str) -> tuple[str, str, int, float]:
+    """(vector literal, model id, dim, dedupe distance) for the active embedding model; ensures its ANN index."""
+    e = embeddings.get()
+    v = (await e.embed([text]))[0]
+    await embeddings.ensure_index(conn, e)
+    return embeddings.literal(v), e.model, int(e.dim), e.dedupe_distance
 
 
 async def log_event(conn, user: str, kind: str, content: dict, task_id=None, tool=None, channel=None, lang=None,
@@ -28,6 +32,7 @@ async def log_event(conn, user: str, kind: str, content: dict, task_id=None, too
 def _row(r) -> dict:
     d = dict(r)
     d.pop("embedding", None)
+    d.pop("embedding_v", None)
     for k, v in d.items():
         if isinstance(v, datetime):
             d[k] = v.isoformat()
@@ -39,21 +44,24 @@ async def add(conn, user: str, text: str, kind: str = "fact", source: str = "use
     if kind not in KINDS:
         raise ValueError(f"kind must be one of {KINDS}")
     text = text.strip()
-    dup = await conn.fetchrow("""SELECT memory_id FROM memory_items WHERE user_id=$1
-        AND embedding <=> $2::vector < 0.08 LIMIT 1""", user, embed(text))
+    vec, model, dim, dd = await _vec(conn, text)
+    dup = await conn.fetchrow(f"""SELECT memory_id FROM memory_items WHERE user_id=$1 AND embed_model=$3
+        AND embedding_v::vector({dim}) <=> $2::vector({dim}) < $4 LIMIT 1""", user, vec, model, dd)
     if dup:  # near-duplicate: update instead of piling up
-        r = await conn.fetchrow("""UPDATE memory_items SET text=$3, updated_at=now() WHERE memory_id=$1 AND user_id=$2
-            RETURNING *""", dup["memory_id"], user, text)
+        r = await conn.fetchrow("""UPDATE memory_items SET text=$3, embedding_v=$4::vector, updated_at=now()
+            WHERE memory_id=$1 AND user_id=$2 RETURNING *""", dup["memory_id"], user, text, vec)
     else:
-        r = await conn.fetchrow("""INSERT INTO memory_items (user_id,kind,text,data_class,source,confidence,embedding)
-            VALUES ($1,$2,$3,$4,$5,$6,$7::vector) RETURNING *""", user, kind, text, data_class, source, confidence, embed(text))
+        r = await conn.fetchrow("""INSERT INTO memory_items (user_id,kind,text,data_class,source,confidence,embedding_v,embed_model)
+            VALUES ($1,$2,$3,$4,$5,$6,$7::vector,$8) RETURNING *""", user, kind, text, data_class, source, confidence, vec, model)
     return _row(r)
 
 
 async def search(conn, user: str, query: str, k: int = 5) -> list[dict]:
-    rs = await conn.fetch("""SELECT *, 1 - (embedding <=> $2::vector) AS score FROM memory_items
-        WHERE user_id=$1 AND (expires_at IS NULL OR expires_at > now())
-        ORDER BY pinned DESC, embedding <=> $2::vector LIMIT $3""", user, embed(query), k)
+    vec, model, dim, _ = await _vec(conn, query)
+    # dim is an int from the embedder, never user input; the cast matches the per-model partial index
+    rs = await conn.fetch(f"""SELECT *, 1 - (embedding_v::vector({dim}) <=> $2::vector({dim})) AS score FROM memory_items
+        WHERE user_id=$1 AND embed_model=$4 AND (expires_at IS NULL OR expires_at > now())
+        ORDER BY pinned DESC, embedding_v::vector({dim}) <=> $2::vector({dim}) LIMIT $3""", user, vec, k, model)
     if rs:
         await conn.execute("UPDATE memory_items SET last_used_at=now() WHERE memory_id = ANY($1::bigint[])",
                            [r["memory_id"] for r in rs])
@@ -71,9 +79,10 @@ async def edit(conn, user: str, memory_id: int, text: str | None = None, pinned:
     if not cur:
         return None
     t = text.strip() if text else cur["text"]
-    r = await conn.fetchrow("""UPDATE memory_items SET text=$3, embedding=$4::vector, pinned=$5, kind=$6, source='user',
-        confidence=1.0, updated_at=now() WHERE memory_id=$1 AND user_id=$2 RETURNING *""", memory_id, user, t, embed(t),
-        cur["pinned"] if pinned is None else pinned, kind or cur["kind"])
+    vec, model, _, _ = await _vec(conn, t)
+    r = await conn.fetchrow("""UPDATE memory_items SET text=$3, embedding_v=$4::vector, embed_model=$7, pinned=$5, kind=$6,
+        source='user', confidence=1.0, updated_at=now() WHERE memory_id=$1 AND user_id=$2 RETURNING *""", memory_id, user, t,
+        vec, cur["pinned"] if pinned is None else pinned, kind or cur["kind"], model)
     return _row(r)
 
 
