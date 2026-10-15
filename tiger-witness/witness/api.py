@@ -37,9 +37,10 @@ async def lifespan(_):
     yield
     await state["pool"].close()
 
-app = FastAPI(title="Witness - the personal agent that can prove it", version="1.0.0", lifespan=lifespan)
+app = FastAPI(title="Witness - the personal agent that can prove it", version="2.0.0", lifespan=lifespan)
 install_http_hardening(app, "witness", RateLimiter(S.rate_per_min, S.rate_burst))
-login_limiter = RateLimiter(10, 5)  # brute-force guard per IP on auth endpoints
+login_limiter = RateLimiter(float(os.environ.get("WITNESS_LOGIN_RATE_PER_MIN", "10")),
+                            int(os.environ.get("WITNESS_LOGIN_BURST", "5")))  # brute-force guard per IP on auth endpoints
 
 
 def pool() -> asyncpg.Pool:
@@ -109,7 +110,13 @@ async def current_user(authorization: str | None = Header(default=None),
     tok = authorization[7:] if authorization and authorization.lower().startswith("bearer ") else witness_session
     if not tok or len(tok) > 200:
         raise HTTPException(401, "not authenticated", headers={"WWW-Authenticate": "Bearer"})
-    uid = await pool().fetchval("SELECT user_id FROM sessions WHERE token_sha256=$1 AND expires_at > now()", token_hash(tok))
+    h = token_hash(tok)
+    uid = await pool().fetchval("SELECT user_id FROM sessions WHERE token_sha256=$1 AND expires_at > now()", h)
+    if not uid and tok.startswith("wit_pat_"):  # personal API token (RLS: looked up under the system context)
+        from witness.db import system_tx
+        async with system_tx(pool()) as c:
+            uid = await c.fetchval("""UPDATE api_tokens SET last_used_at=now() WHERE token_sha256=$1 AND revoked_at IS NULL
+                AND expires_at > now() RETURNING user_id""", h)
     if not uid:
         raise HTTPException(401, "session expired or invalid", headers={"WWW-Authenticate": "Bearer"})
     return uid
@@ -317,3 +324,13 @@ async def replay(body: ReplayIn, uid: str = Depends(current_user)):
         if "action" in pm and pm["action"] not in ACTIONS:
             raise HTTPException(422, "bad action in mandate_patch")
     return await agent.replay(pool(), uid, body.since_days, body.params, body.mandate_patch)
+
+
+# ------------------------------------------------------------------ v2: task-executing agent
+from witness import api_v2  # noqa: E402
+api_v2.install(app, pool, current_user, state)
+
+
+@app.get("/app")
+async def app_ui():
+    return FileResponse(os.path.join(STATIC, "app.html"))

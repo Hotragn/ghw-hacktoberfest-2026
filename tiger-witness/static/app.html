@@ -1,0 +1,68 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Witness Agent</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262a33;--fg:#e8e6e1;--mut:#9aa0aa;--ok:#3ecf8e;--warn:#f5b84b;--bad:#ff6b6b;--acc:#7aa2ff}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 Inter,system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;gap:14px;align-items:center;padding:12px 20px;border-bottom:1px solid var(--line)}header h1{font-size:17px;margin:0}
+nav{display:flex;gap:4px;flex-wrap:wrap}nav button{background:transparent;color:var(--mut);border:1px solid transparent}
+nav button.on{color:var(--fg);border-color:var(--line);background:var(--card)}
+main{max-width:1100px;margin:auto;padding:16px 20px}.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px;margin-bottom:14px}
+input,select,textarea{background:#0d0f13;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px;font:inherit}
+button{background:var(--acc);color:#0b0d12;border:0;border-radius:6px;padding:7px 12px;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}button.bad{background:var(--bad)}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}.row input{flex:1;min-width:120px}
+.msg{padding:8px 12px;border-radius:10px;margin:6px 0;max-width:80%;white-space:pre-wrap}.u{background:#22304d;margin-left:auto}.a{background:#1f232c}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600;background:#1f232c}
+.executed{color:var(--ok)}.blocked{color:var(--bad)}.needs_approval{color:var(--warn)}.mut{color:var(--mut)}.mono{font-family:ui-monospace,monospace;font-size:12px}
+table{width:100%;border-collapse:collapse}td,th{padding:5px 6px;border-bottom:1px solid var(--line);text-align:left;font-size:13px;vertical-align:top}
+#chatlog{height:52vh;overflow:auto;display:flex;flex-direction:column}
+</style></head><body>
+<header><h1>🧾 Witness agent</h1>
+<nav id="tabs"></nav><span class="mut" id="who" style="margin-left:auto"></span><a href="/" class="mut">v1 dashboard</a></header>
+<main id="view"></main>
+<script>
+const $=s=>document.querySelector(s), esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(path,opt={}){const r=await fetch(path,{credentials:'same-origin',headers:{'content-type':'application/json'},...opt,body:opt.body?JSON.stringify(opt.body):undefined});
+ if(r.status===401){location.href='/';throw 'auth'} const j=await r.json().catch(()=>({})); if(!r.ok) alert(j.error||j.detail||r.status); return j}
+const TABS={chat:'Chat',approvals:'Approvals',memory:'Memory',grants:'Grants',mandates:'Payments',timeline:'Receipts',settings:'Channels & tools'};
+let cur='chat';function tabs(){$('#tabs').innerHTML=Object.entries(TABS).map(([k,v])=>`<button class="${k===cur?'on':''}" onclick="go('${k}')">${v}</button>`).join('')}
+function go(t){cur=t;tabs();V[t]()}
+const log=[];
+function steps(ss){return (ss||[]).map(s=>`<span class="pill ${s.verdict}">${esc(s.tool)}: ${s.verdict}</span>`).join(' ')}
+const V={
+ async chat(){ $('#view').innerHTML=`<div class="card"><div id="chatlog"></div><div class="row" style="margin-top:8px"><input id="m" placeholder="Ask in any language: pay, email, fetch a page, check calendar, remember…"><button id="send">Send</button></div></div>`;
+  const draw=()=>{$('#chatlog').innerHTML=log.map(m=>`<div class="msg ${m.r}">${esc(m.t)}${m.s?'<div>'+m.s+'</div>':''}</div>`).join('');$('#chatlog').scrollTop=1e9};draw();
+  const send=async()=>{const t=$('#m').value.trim();if(!t)return;$('#m').value='';log.push({r:'u',t});draw();
+   const j=await api('/api/v2/chat',{method:'POST',body:{message:t}});log.push({r:'a',t:j.reply,s:steps(j.steps)+(j.approval_id?` <button onclick="decide('${j.approval_id}',true)">Approve</button> <button class="ghost" onclick="decide('${j.approval_id}',false)">Deny</button>`:'')});draw()};
+  $('#send').onclick=send;$('#m').onkeydown=e=>{if(e.key==='Enter')send()}},
+ async approvals(){const a=await api('/api/v2/approvals?status=all');$('#view').innerHTML=`<div class="card"><h3>Approvals inbox</h3><table><tr><th>When</th><th>Tool</th><th>Arguments</th><th>Why parked</th><th></th></tr>${a.map(x=>`<tr><td class="mono">${esc(x.created_at.slice(0,19))}</td><td>${esc(x.tool)}</td><td class="mono">${esc(JSON.stringify(x.args))}</td><td>${x.reasons.filter(r=>r.outcome!=='pass').map(r=>esc(r.rule+': '+r.detail)).join('<br>')}</td><td>${x.status==='pending'?`<button onclick="decide('${x.approval_id}',true)">Approve</button> <button class="ghost" onclick="decide('${x.approval_id}',false)">Deny</button>`:esc(x.status)}</td></tr>`).join('')}</table></div>`},
+ async memory(){const m=await api('/api/v2/memory');const hb=await api('/api/v2/habits');$('#view').innerHTML=`<div class="card"><h3>What Witness remembers about you</h3><p class="mut">Everything here is yours: edit, pin or forget. Forgetting deletes the text and keeps only a hash in your receipt log.</p>
+  <div class="row"><input id="nm" placeholder="Add a fact or preference"><select id="nk"><option>fact</option><option>preference</option><option>person</option><option>place</option></select><button onclick="addMem()">Add</button></div>
+  <table>${m.map(x=>`<tr><td>${x.pinned?'📌':''}<span class="pill">${esc(x.kind)}</span></td><td contenteditable data-id="${x.memory_id}" onblur="editMem(this)">${esc(x.text)}</td><td class="mut">${esc(x.source)}</td><td><button class="ghost" onclick="pin(${x.memory_id},${!x.pinned})">${x.pinned?'Unpin':'Pin'}</button> <button class="bad" onclick="forget(${x.memory_id})">Forget</button></td></tr>`).join('')}</table></div>
+  <div class="card"><h3>Habits (continuous aggregate)</h3><table>${hb.map(h=>`<tr><td>${esc(h.tool)}</td><td>${esc(h.channel)}</td><td>${h.n} calls</td><td class="mut">${h.n_tainted} on untrusted context</td></tr>`).join('')}</table></div>`},
+ async grants(){const g=await api('/api/v2/grants');$('#view').innerHTML=`<div class="card"><h3>Consent grants</h3><div class="row"><input id="gp" placeholder="tool pattern e.g. calendar_* or mcp:github/*"><select id="gs"><option value="read">read</option><option value="read,write">read+write</option></select><select id="gd"><option value="public,personal">public+personal</option><option value="public">public</option></select><input id="gh" type="number" value="24" style="max-width:90px" title="hours"><label><input type="checkbox" id="ga"> auto-approve writes</label><button onclick="addGrant()">Grant</button></div>
+  <table><tr><th>Pattern</th><th>Scopes</th><th>Data</th><th>Uses</th><th>Expires</th><th></th></tr>${g.map(x=>`<tr><td class="mono">${esc(x.tool_pattern)}</td><td>${esc(x.scopes)}${x.auto_approve?' (auto)':''}</td><td>${esc(x.data_classes)}</td><td>${x.uses}${x.max_uses?'/'+x.max_uses:''}</td><td class="mono">${esc(x.expires_at.slice(0,16))}</td><td>${x.revoked_at?'revoked':`<button class="bad" onclick="revokeGrant('${x.grant_id}')">Revoke</button>`}</td></tr>`).join('')}</table></div>`},
+ async mandates(){const m=await api('/api/v2/payment-mandates');const p=await api('/api/v2/payments');$('#view').innerHTML=`<div class="card"><h3>Payment mandates (AP2-style open mandates)</h3><div class="row"><input id="pd" placeholder="description"><input id="pm" placeholder="merchants, comma separated (e.g. *.instacart.com)"><input id="px" type="number" placeholder="max per txn" style="max-width:120px"><input id="pb" type="number" placeholder="budget / 30d" style="max-width:120px"><label><input type="checkbox" id="ph"> I must be present</label><button onclick="addMandate()">Authorize</button></div>
+  <table>${m.map(x=>`<tr><td class="mono">${esc(x.mandate_id)}</td><td>${esc(x.description)}</td><td>${esc(x.merchants)}</td><td>≤ ${x.max_per_txn} / txn</td><td>${x.spent_in_window} of ${x.budget}</td><td>${x.revoked_at?'revoked':`<button class="bad" onclick="revokeMandate('${x.mandate_id}')">Revoke</button>`}</td></tr>`).join('')}</table></div>
+  <div class="card"><h3>Payments</h3><table>${p.map(x=>`<tr><td class="mono">${esc(x.ts.slice(0,19))}</td><td>${esc(x.merchant)}</td><td>${x.amount} ${esc(x.currency)}</td><td>${esc(x.rail)}:${esc(x.status)}</td><td class="mono">checkout ${esc(x.checkout_hash.slice(0,12))}…</td><td>${x.agent_signature_valid?'✅ ES256':'❌'}</td></tr>`).join('')}</table></div>`},
+ async timeline(){const t=await api('/api/v2/timeline');const v=await api('/api/receipts/verify');$('#view').innerHTML=`<div class="card"><h3>Receipts timeline <span class="pill ${v.ok?'executed':'blocked'}">chain ${v.ok?'verified':'BROKEN'} (${v.receipts})</span></h3><table>${t.map(r=>{const p=r.payload;return `<tr><td class="mono">#${r.seq} ${esc(r.ts.slice(0,19))}</td><td>${esc(p.kind||p.decision||p.event)}</td><td>${esc(p.tool||p.request||'')}</td><td><span class="pill ${p.verdict||''}">${esc(p.verdict||p.decision||'')}</span></td><td class="mono">${esc(r.hash.slice(0,16))}…</td></tr>`}).join('')}</table></div>`},
+ async settings(){const c=await api('/api/v2/channels');const s=await api('/api/v2/mcp-servers');const tk=await api('/api/v2/tokens');$('#view').innerHTML=`<div class="card"><h3>Chat where you already are</h3><div class="row"><select id="lc"><option>telegram</option><option>whatsapp</option><option>imessage</option></select><button onclick="linkCode()">Get link code</button><span id="code" class="mono"></span></div>
+  <p class="mut">Linked: ${c.links.map(l=>esc(l.channel+' '+l.external_id)).join(', ')||'none'}</p><p class="mut">Signed webhook: POST /channels/webhook, header X-Witness-User=${esc(c.webhook.user)}, secret <span class="mono">${esc(c.webhook.secret)}</span></p></div>
+  <div class="card"><h3>MCP servers</h3><div class="row"><input id="mn" placeholder="name"><input id="mu" placeholder="https://… MCP endpoint"><input id="ma" placeholder="AUTH_ENV_VAR (optional)"><button onclick="addMcp()">Connect</button></div><table>${s.map(x=>`<tr><td>${esc(x.name)}</td><td class="mono">${esc(x.target)}</td><td><button class="bad" onclick="delMcp('${x.name}')">Remove</button></td></tr>`).join('')}</table></div>
+  <div class="card"><h3>API tokens</h3><div class="row"><input id="tn" placeholder="token name"><button onclick="addTok()">Create</button><span id="tok" class="mono"></span></div><table>${tk.map(x=>`<tr><td>${esc(x.name)}</td><td class="mono">${esc(x.id)}</td><td>${x.revoked_at?'revoked':`<button class="bad" onclick="delTok('${x.id}')">Revoke</button>`}</td></tr>`).join('')}</table></div>`}};
+async function decide(id,ok){const j=await api('/api/v2/approvals/'+id,{method:'POST',body:{approve:ok}});log.push({r:'a',t:j.reply,s:steps(j.steps)});go(cur)}
+async function addMem(){await api('/api/v2/memory',{method:'POST',body:{text:$('#nm').value,kind:$('#nk').value}});go('memory')}
+async function editMem(el){await api('/api/v2/memory/'+el.dataset.id,{method:'PATCH',body:{text:el.innerText}})}
+async function pin(id,p){await api('/api/v2/memory/'+id,{method:'PATCH',body:{pinned:p}});go('memory')}
+async function forget(id){if(confirm('Forget this permanently?')){await api('/api/v2/memory/'+id,{method:'DELETE'});go('memory')}}
+async function addGrant(){await api('/api/v2/grants',{method:'POST',body:{tool_pattern:$('#gp').value,scopes:$('#gs').value.split(','),data_classes:$('#gd').value.split(','),ttl_hours:+$('#gh').value,auto_approve:$('#ga').checked}});go('grants')}
+async function revokeGrant(id){await api('/api/v2/grants/'+id+'/revoke',{method:'POST'});go('grants')}
+async function addMandate(){await api('/api/v2/payment-mandates',{method:'POST',body:{description:$('#pd').value,merchants:$('#pm').value.split(',').map(s=>s.trim()).filter(Boolean),max_per_txn:+$('#px').value,budget:+$('#pb').value,human_present_required:$('#ph').checked}});go('mandates')}
+async function revokeMandate(id){await api('/api/v2/payment-mandates/'+id+'/revoke',{method:'POST'});go('mandates')}
+async function linkCode(){const j=await api('/api/v2/channels/link-code',{method:'POST',body:{channel:$('#lc').value}});$('#code').textContent='send: link '+j.code+' (15 min)'}
+async function addMcp(){await api('/api/v2/mcp-servers',{method:'POST',body:{name:$('#mn').value,transport:'http',target:$('#mu').value,auth_env:$('#ma').value||null}});go('settings')}
+async function delMcp(n){await api('/api/v2/mcp-servers/'+n,{method:'DELETE'});go('settings')}
+async function addTok(){const j=await api('/api/v2/tokens',{method:'POST',body:{name:$('#tn').value}});$('#tok').textContent=j.token+'  (copy now, shown once)'}
+async function delTok(id){await api('/api/v2/tokens/'+id,{method:'DELETE'});go('settings')}
+api('/api/me').then(m=>{$('#who').textContent=m.display_name||m.user_id;go('chat')});
+</script></body></html>
