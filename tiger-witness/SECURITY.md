@@ -30,3 +30,6 @@ Run migrations as the schema owner (`tsdbadmin`) from CI/CD only. The app connec
 - Receipts use HMAC (a server-held key). The production path is per-user Ed25519 keys on the user's device, co-signing approvals, so even the operator cannot forge consent.
 - The scam score is a heuristic over keyless hashed embeddings. A real deployment should use a proper embedding model (pgai) and a maintained storyline feed.
 - The demo password for seeded users is public. Never run `simulator --reset` against production.
+
+## v2 agent
+See the threat model in the README ("Witness v2" → "Threat model"). Key controls: the tool gate runs outside the model (reputation, consent grant or AP2-style mandate, taint provenance, risk); FORCE row-level security on every v2 table; signed channel webhooks; an SSRF guard; ES256-signed closed payment mandates.

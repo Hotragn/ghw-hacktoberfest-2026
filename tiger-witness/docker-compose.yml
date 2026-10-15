@@ -34,8 +34,34 @@ services:
       WITNESS_SIGNING_KEY: ${WITNESS_SIGNING_KEY:?set WITNESS_SIGNING_KEY}
       WITNESS_ENV: ${WITNESS_ENV:-dev}
       WITNESS_COOKIE_SECURE: ${WITNESS_COOKIE_SECURE:-false}
+      WITNESS_LLM_BASE_URL: ${WITNESS_LLM_BASE_URL:-}
+      WITNESS_LLM_API_KEY: ${WITNESS_LLM_API_KEY:-}
+      WITNESS_LLM_MODEL: ${WITNESS_LLM_MODEL:-gpt-4o-mini}
+      STRIPE_API_KEY: ${STRIPE_API_KEY:-}
+      TELEGRAM_BOT_TOKEN: ${TELEGRAM_BOT_TOKEN:-}
+      TELEGRAM_WEBHOOK_SECRET: ${TELEGRAM_WEBHOOK_SECRET:-}
+      WHATSAPP_TOKEN: ${WHATSAPP_TOKEN:-}
+      WHATSAPP_PHONE_NUMBER_ID: ${WHATSAPP_PHONE_NUMBER_ID:-}
+      WHATSAPP_VERIFY_TOKEN: ${WHATSAPP_VERIFY_TOKEN:-}
+      WHATSAPP_APP_SECRET: ${WHATSAPP_APP_SECRET:-}
+      IMESSAGE_BLUEBUBBLES_URL: ${IMESSAGE_BLUEBUBBLES_URL:-}
+      IMESSAGE_BLUEBUBBLES_PASSWORD: ${IMESSAGE_BLUEBUBBLES_PASSWORD:-}
+      IMESSAGE_WEBHOOK_SECRET: ${IMESSAGE_WEBHOOK_SECRET:-}
+      WITNESS_FILES_ROOT: /data/files
+    volumes: [witness_files:/data/files]
     depends_on: { migrate: { condition: service_completed_successfully } }
     read_only: true
     security_opt: ["no-new-privileges:true"]
 volumes:
   witness_db: {}
+  witness_files: {}
+  # Run the full test suite against the local Timescale:  docker compose --profile test run --rm test
+  test:
+    build: .
+    profiles: ["test"]
+    command: ["sh", "-c", "pip install -q -r requirements-dev.txt && pytest -q"]
+    environment:
+      TEST_DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-localdev}@db:5432/tsdb
+    volumes: [./tests:/app/tests:ro, ./requirements-dev.txt:/app/requirements-dev.txt:ro, ./pytest.ini:/app/pytest.ini:ro]
+    user: "0"
+    depends_on: { db: { condition: service_healthy } }
