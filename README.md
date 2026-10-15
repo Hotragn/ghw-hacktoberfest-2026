@@ -28,3 +28,7 @@ Completed GitHub Skills exercises for MLH Global Hack Week:
 
 - [Introduction to Repository Management](https://github.com/Hotragn/skills-introduction-to-repository-management)
 - [Getting Started with GitHub Copilot](https://github.com/Hotragn/skills-getting-started-with-github-copilot)
+
+## Tiger Cloud proof
+
+Screenshots and an MCP transcript proving the Tiger Cloud features are live: [docs/tiger-proof](docs/tiger-proof/README.md).

@@ -1,0 +1,55 @@
+# Tiger MCP client session  2026-10-15 12:45:52  (America/New_York)
+$ python3 client.py   # spawns: tiger mcp start  (stdio JSON-RPC)
+>> initialize
+<< {"name": "tiger", "title": "Tiger MCP", "version": "0.26.0"} protocol=2025-06-18
+>> tools/list
+<< db_query, db_schema, feedback, search_docs, service_create, service_delete, service_fork, service_get, service_list, service_logs, service_metrics_available, service_metrics_details, service_metrics_series, service_rename, service_resize, service_start, service_stop, service_update_password, view_skill
+>> tools/call service_list {}
+<< {
+ "services": [
+  {
+   "created": "2026-10-15T08:32:57Z",
+   "environment": "DEV",
+   "id": "vum48trstx",
+   "name": "ghw-tiger",
+   "region": "us-east-1",
+   "resources": {
+    "cpu": "shared",
+    "memory": "shared"
+   },
+   "status": "READY",
+   "type": "TIMESCALEDB"
+  }
+ ]
+}
+>> tools/call service_get {"service_id": "vum48trstx"}
+<< {
+ "service": {
+  "connection_string": "postgresql://tsdbadmin@vum48trstx.mxx1c3apad.tsdb.cloud.timescale.com:33225/tsdb?sslmode=require",
+  "created": "2026-10-15T08:32:57Z",
+  "direct_endpoint": "vum48trstx.mxx1c3apad.tsdb.cloud.timescale.com:33225",
+  "environment": "DEV",
+  "id": "vum48trstx",
+  "name": "ghw-tiger",
+  "region": "us-east-1",
+  "replicas": 0,
+  "resources": {
+   "cpu": "shared",
+   "memory": "shared"
+  },
+  "status": "READY",
+  "type": "TIMESCALEDB"
+ }
+}
+>> tools/call search_docs {"source": "tiger", "semanticWeight": 0.7, "query": "hypertable design for an append-only tool_calls event log table", "limit": 3}
+<< {
+ "results": [
+  {
+   "content": "# Your first hypertable\n\n## How are hypertables used?  \nYou use a hypertable like any other table: connect with your usual client, run `INSERT` and `SELECT` (and `UPDATE`/`DELETE` where needed). Typical use cases include:  \n* IoT and sensors: Device readings with a timestamp (temperature, humidity, location).\n* Metrics and monitoring: Server or app metrics (CPU, latency, errors) over time.\n* Events and logs: User or system events with a time component.  \nFor creating, altering, and managing hypertables in real projects, see [Understand hypertables](https://www.tigerdata.com/docs/learn/hypertables/understand-hypertables). For issues such as unique indexes, compression, or dropping chunks, see [Troubleshoot hypertables](https://www.tigerdata.com/docs/build/tips-and-tricks/troubleshoot-hypertables).",
+   "id": 4882,
+   "metadata": "{\"Header 1\": \"Your first hypertable\", \"Header 2\": \"How are hypertables used?\", \"source_url\": \"https://www.tigerdata.com/docs/build/how-to/your-first-hypertable#how-are-hypertables-used\", \"chunk_index\": 4, \"chunking_method\": \"header_based\", \"sub_chunk_index\": 0}",
+   "rrf_score": 0.011475409836065573
+  },
+  {
+   "content": "# Create and configure a hypertable\n\n```\nCREATE TABLE sensor_data (\n\n\n\ntime        TIMESTAMPTZ NOT NULL,\n\n\n\ndevice_id   INT,\n\n\n\ntemperature DOUBLE PRECISION\n\n\n\n) WITH (timescaledb.hypertable);\n```  \nIf your table has multiple timestamp columns or uses a non-standard name, specify the\npartition column explicitly:  \n```\nCREATE TABLE order_events (\n\n\n\ncreated_at  TIMESTAMPTZ NOT NULL,\n\n\n\norder_id    BIGINT,\n\n\n\nstatus      TEXT\n\n\n\n) WITH (\n\n\n\ntimescaledb.hypertable,\n\n\n\ntimescaledb.partition_column = 'created_at'\n\n\n\n);\
+... [truncated]
