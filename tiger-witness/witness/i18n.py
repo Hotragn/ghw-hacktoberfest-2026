@@ -10,18 +10,38 @@ _SCRIPTS = [  # (lang, regex of a script that identifies it)
     ("ja", r"[\u3040-\u30FF]"), ("zh", r"[\u4E00-\u9FFF]"), ("ru", r"[\u0400-\u04FF]"), ("el", r"[\u0370-\u03FF]"),
 ]
 _STOP = {
-    "en": "the and is are you to of for my me please what can with this that it on in at",
+    "en": "the and is are you to of for my me please what can with this that it on in at thanks thank hello lot yes hi",
     "es": "el la los las de que y en por para mi es una un con como qué puedes favor",
     "fr": "le la les de des et est en pour mon ma je vous un une avec que qui sur s'il",
     "de": "der die das und ist ich du nicht ein eine mit für mein bitte was zu auf",
     "pt": "o a os as de que e em para meu minha é um uma com você por favor não",
     "it": "il lo la gli le di che e è per mio mia un una con non sono favore",
-    "id": "yang dan di ke dari ini itu untuk saya tolong apa dengan tidak bisa ada",
-    "sw": "na ya wa kwa ni la za katika tafadhali nini mimi wewe hii",
+    "id": "yang dan di ke dari ini itu untuk saya tolong apa dengan tidak bisa ada terima kasih",
+    "sw": "na ya wa kwa ni la za katika tafadhali nini mimi wewe hii asante sana habari jambo",
+    "tl": "ang ng mga sa salamat po opo hindi ako ikaw paki",
     "tr": "ve bir bu da de için ne ben sen lütfen mi ile çok",
-    "nl": "de het een en is van ik je niet voor met mijn alsjeblieft wat",
+    "nl": "de het een en is van ik je niet voor met mijn alsjeblieft wat dank wel bedankt",
 }
 _STOPSETS = {k: set(v.split()) for k, v in _STOP.items()}
+
+
+_LINGUA = None
+_LINGUA_CODES = {"ENGLISH": "en", "SPANISH": "es", "FRENCH": "fr", "GERMAN": "de", "PORTUGUESE": "pt", "ITALIAN": "it",
+                 "INDONESIAN": "id", "SWAHILI": "sw", "TURKISH": "tr", "DUTCH": "nl", "POLISH": "pl", "VIETNAMESE": "vi",
+                 "TAGALOG": "tl", "MALAY": "ms", "ROMANIAN": "ro", "SWEDISH": "sv", "YORUBA": "yo", "ZULU": "zu"}
+
+
+def _lingua():
+    """Lazy lingua detector restricted to Latin-script languages we serve (n-gram models; accurate on 1-3 word inputs)."""
+    global _LINGUA
+    if _LINGUA is None:
+        try:
+            from lingua import Language, LanguageDetectorBuilder
+            langs = [getattr(Language, n) for n in _LINGUA_CODES if hasattr(Language, n)]
+            _LINGUA = LanguageDetectorBuilder.from_languages(*langs).with_preloaded_language_models().build()
+        except ImportError:  # optional dependency: fall back to stopword voting
+            _LINGUA = False
+    return _LINGUA
 
 
 def detect(text: str, default: str = "en") -> str:
@@ -32,9 +52,18 @@ def detect(text: str, default: str = "en") -> str:
     best = max(counts, key=counts.get)
     if counts[best] >= 2:
         return best
-    words = re.findall(r"[a-zà-ÿ']+", t.lower())
+    words = re.findall(r"[a-zà-ÿğışçöü']+", t.lower())
     if not words:
         return default
+    votes = {k: 0.35 * sum(w in st for w in words) for k, st in _STOPSETS.items()}  # lexical evidence
+    det = _lingua()
+    if det:  # statistical evidence: lingua n-gram confidences, combined with the lexical votes
+        for c in det.compute_language_confidence_values(t):
+            code = _LINGUA_CODES.get(c.language.name)
+            if code:
+                votes[code] = votes.get(code, 0.0) + c.value
+        best = max(votes, key=votes.get)
+        return best if votes[best] >= 0.25 else default
     score = {k: sum(w in s for w in words) for k, s in _STOPSETS.items()}
     lang = max(score, key=score.get)
     return lang if score[lang] > 0 else default
@@ -44,7 +73,8 @@ NAMES = {"en": "English", "es": "Spanish", "fr": "French", "de": "German", "pt":
          "id": "Indonesian", "sw": "Swahili", "tr": "Turkish", "nl": "Dutch", "hi": "Hindi", "te": "Telugu",
          "ta": "Tamil", "kn": "Kannada", "ml": "Malayalam", "bn": "Bengali", "gu": "Gujarati", "pa": "Punjabi",
          "ar": "Arabic", "he": "Hebrew", "th": "Thai", "ko": "Korean", "ja": "Japanese", "zh": "Chinese",
-         "ru": "Russian", "el": "Greek"}
+         "ru": "Russian", "el": "Greek", "pl": "Polish", "vi": "Vietnamese", "tl": "Tagalog", "ms": "Malay",
+         "ro": "Romanian", "sv": "Swedish", "yo": "Yoruba", "zu": "Zulu"}
 
 PHRASES = {
     "needs_approval": {
@@ -80,6 +110,10 @@ PHRASES = {
 }
 
 
+_PHRASE_FALLBACK = {"ms": "id"}  # Malay reads Indonesian phrasing
+
+
 def phrase(key: str, lang: str, **kw) -> str:
     table = PHRASES[key]
+    lang = lang if lang in table else _PHRASE_FALLBACK.get(lang, lang)
     return table.get(lang, table["en"]).format(**kw)
