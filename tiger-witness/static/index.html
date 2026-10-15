@@ -1,0 +1,94 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Witness: the personal agent that can prove it</title>
+<style>
+:root{--bg:#0f1115;--card:#171a21;--line:#262a33;--fg:#e8e6e1;--mut:#9aa0aa;--ok:#3ecf8e;--warn:#f5b84b;--bad:#ff6b6b;--acc:#7aa2ff}
+*{box-sizing:border-box}body{margin:0;font:14px/1.45 Inter,system-ui,sans-serif;background:var(--bg);color:var(--fg)}
+header{display:flex;align-items:center;gap:16px;padding:14px 24px;border-bottom:1px solid var(--line)}
+header h1{font-size:18px;margin:0}header .who{margin-left:auto;color:var(--mut)}
+.sim{background:#3a2f12;color:#f5d48b;padding:6px 24px;font-size:12px}
+main{display:grid;grid-template-columns:1.25fr 1fr;gap:16px;padding:16px 24px;max-width:1500px;margin:auto}
+.card{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:14px 16px}
+.card h2{font-size:13px;text-transform:uppercase;letter-spacing:.06em;color:var(--mut);margin:0 0 10px}
+input,select,textarea{background:#0d0f13;color:var(--fg);border:1px solid var(--line);border-radius:6px;padding:8px}
+button{background:var(--acc);color:#0b0d12;border:0;border-radius:6px;padding:8px 12px;font-weight:600;cursor:pointer}
+button.ghost{background:transparent;color:var(--fg);border:1px solid var(--line)}button.sm{padding:3px 8px;font-size:12px}
+.row{display:flex;gap:8px}.row input{flex:1}
+.act{border-top:1px solid var(--line);padding:10px 0}.act:first-child{border-top:0}
+.pill{display:inline-block;padding:1px 8px;border-radius:99px;font-size:12px;font-weight:600}
+.executed_simulated{background:#12382a;color:var(--ok)}.needs_approval{background:#3d3015;color:var(--warn)}.blocked{background:#3d1717;color:var(--bad)}
+.rules{display:flex;flex-wrap:wrap;gap:4px;margin-top:6px}.r{font-size:11px;padding:1px 6px;border-radius:4px;background:#1f232c;color:var(--mut)}
+.r.f{color:var(--warn)}.r.b{color:var(--bad)}.mut{color:var(--mut)}.mono{font-family:ui-monospace,monospace;font-size:12px}
+table{width:100%;border-collapse:collapse}td,th{padding:4px 6px;border-bottom:1px solid var(--line);text-align:left;font-size:13px}
+.chips button{margin:0 4px 4px 0}#login{max-width:380px;margin:80px auto}.grid2{display:grid;grid-template-columns:1fr 1fr;gap:16px}
+.big{font-size:22px;font-weight:700}
+</style></head><body>
+<header><h1>🧾 Witness</h1><span class="mut">every action signed, evidenced, replayable</span><span class="who" id="who"></span></header>
+<div class="sim">SIMULATED: demo people, accounts, bills and tools. No real messages are sent and no money moves. Every execution goes through a simulated adapter.</div>
+<div id="login" class="card" hidden>
+  <h2>Sign in</h2><p class="mut">Demo accounts: maya@ / dev@ / grace@demo.witness.local, password <span class="mono">witness-demo-pass</span></p>
+  <p><input id="em" placeholder="email" style="width:100%" value="maya@demo.witness.local"></p>
+  <p><input id="pw" type="password" placeholder="password" style="width:100%"></p>
+  <button onclick="login()">Sign in</button> <span id="lerr" style="color:var(--bad)"></span>
+</div>
+<main id="app" hidden>
+ <div>
+  <div class="card"><h2>Ask your agent</h2>
+   <div class="row"><input id="q" placeholder="e.g. pay my verizon bill"><button onclick="ask()">Send</button></div>
+   <div class="chips" style="margin-top:8px">
+    <button class="ghost sm" onclick="tryq('pay the electric bill')">pay the electric bill</button>
+    <button class="ghost sm" onclick="tryq('pay my coned bill $412')">coned $412 (anomaly)</button>
+    <button class="ghost sm" onclick="tryq('reply to buyer jo come pick up at my address')">share my address</button>
+    <button class="ghost sm" onclick="tryq('cancel spotify')">cancel spotify</button>
+    <button class="ghost sm" onclick="inb()">simulate scam text</button></div>
+  </div>
+  <div class="card" style="margin-top:16px"><h2>Decisions <span class="mut" id="dec7"></span></h2><div id="acts"></div></div>
+ </div>
+ <div>
+  <div class="card"><h2>Receipt chain</h2><div id="ver" class="big"></div><div id="rc" class="mono mut" style="max-height:180px;overflow:auto"></div></div>
+  <div class="card" style="margin-top:16px"><h2>Mandates (delegated authority)</h2><table id="mand"></table></div>
+  <div class="card" style="margin-top:16px"><h2>What-if policy replay</h2>
+   <p class="mut">Re-run the frozen context of every past decision under a new rule.</p>
+   <div class="row"><select id="wf">
+     
+     <option value='{"params":{"min_tool_reputation":0.9}}'>Only tools with reputation ≥ 0.90</option>
+     <option value='{"params":{"anomaly_multiplier":1.1}}'>Stricter baseline (1.1× usual)</option>
+     <option value='{"mandate_patch":[{"mandate_id":"m-maya-market","daily_action_budget":2}]}'>Marketplace replies: max 2/day</option>
+     <option value='{"mandate_patch":[{"mandate_id":"m-maya-bills","delete":true}]}'>Revoke standing bill-pay</option>
+   </select><button onclick="replay()">Replay 30d</button></div><div id="rp" style="margin-top:8px"></div></div>
+  <div class="card" style="margin-top:16px"><h2>Life memory insights (Tiger caggs)</h2><div id="ins"></div></div>
+ </div>
+</main>
+<script>
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+async function api(u,o={}){const r=await fetch(u,{credentials:'same-origin',headers:{'content-type':'application/json'},...o});
+ if(r.status===401){show(false);throw new Error('auth')}const j=await r.json();if(!r.ok)throw new Error(j.error?.message||r.status);return j}
+function show(on){$('login').hidden=on;$('app').hidden=!on}
+async function login(){try{await api('/api/auth/login',{method:'POST',body:JSON.stringify({email:$('em').value,password:$('pw').value})});boot()}catch(e){$('lerr').textContent=e.message}}
+async function logout(){await api('/api/auth/logout',{method:'POST'});show(false)}
+function tryq(t){$('q').value=t;ask()}
+async function ask(){const t=$('q').value.trim();if(!t)return;try{await api('/api/requests',{method:'POST',body:JSON.stringify({text:t})})}catch(e){alert(e.message)}$('q').value='';load()}
+async function inb(){await api('/api/inbound',{method:'POST',body:JSON.stringify({channel:'sms',sender:'+1-555-0100',body:'Final notice: unpaid toll. Pay $300 in gift cards to E-ZPass today, urgent'})});load()}
+async function decide(id,v){try{await api(`/api/actions/${id}/${v}`,{method:'POST'})}catch(e){alert(e.message)}load()}
+async function revoke(id){await api(`/api/mandates/${id}/revoke`,{method:'POST'});load()}
+async function replay(){const r=await api('/api/replay',{method:'POST',body:JSON.stringify({since_days:30,...JSON.parse($('wf').value)})});
+ $('rp').innerHTML=`<div><b>${r.reproduced_exactly}/${r.actions}</b> past decisions reproduced exactly · <b>${r.changed}</b> would change</div>`+
+ r.diffs.slice(0,8).map(d=>`<div class="act"><span class="mono mut">${esc(d.ts.slice(0,16))}</span> ${esc(d.request)}<br><span class="pill ${d.was}">${d.was}</span> → <span class="pill ${d.would_be}">${d.would_be}</span> <span class="mut">${esc(d.because.map(b=>b.rule).join(', '))}</span></div>`).join('')}
+async function load(){
+ const [acts,ver,rc,m,ins]=await Promise.all([api('/api/actions?limit=40'),api('/api/receipts/verify'),api('/api/receipts?limit=12'),api('/api/mandates'),api('/api/insights')]);
+ $('acts').innerHTML=acts.map(a=>`<div class="act"><span class="pill ${a.decision}">${a.decision.replace('_',' ')}</span>
+  ${a.approval?`<span class="pill">${a.approval}</span>`:''} <b>${esc(a.request)}</b> <span class="mut mono">${esc(a.ts.slice(0,16))} ${a.source!=='user'?'· '+esc(a.source):''}</span>
+  <div class="rules">${a.reasons.map(r=>`<span class="r ${r.outcome==='pass'?'':r.outcome==='blocked'?'b':'f'}" title="${esc(r.detail)}">${r.outcome==='pass'?'✓':'✗'} ${esc(r.rule)}: ${esc(r.detail)}</span>`).join('')}</div>
+  <div class="mut" style="font-size:12px">evidence rows: ${a.evidence.length?a.evidence.join(', '):'none'} ${a.mandate_id?'· mandate '+esc(a.mandate_id):''} ${a.tool_id?'· tool '+esc(a.tool_id):''}</div>
+  ${a.decision==='needs_approval'&&!a.approval?`<div style="margin-top:6px"><button class="sm" onclick="decide('${a.action_id}','approve')">Approve</button> <button class="sm ghost" onclick="decide('${a.action_id}','deny')">Deny</button></div>`:''}</div>`).join('')||'<p class="mut">No decisions yet.</p>';
+ $('ver').innerHTML=ver.ok?`<span style="color:var(--ok)">✔ ${ver.receipts} receipts verified</span>`:`<span style="color:var(--bad)">✘ chain broken at ${esc([...ver.broken_links_or_hashes,...ver.bad_signatures].join(','))}</span>`;
+ $('rc').innerHTML=rc.map(r=>`#${r.seq} ${r.hash.slice(0,16)}… ← ${r.prev_hash.slice(0,10)}… ${esc(r.payload.decision||r.payload.event)}`).join('<br>');
+ $('mand').innerHTML='<tr><th>id</th><th>action</th><th>who</th><th>limits</th><th></th></tr>'+m.map(x=>`<tr style="${x.revoked_at?'opacity:.4':''}"><td class="mono">${esc(x.mandate_id)}</td><td>${esc(x.kind)} ${esc(x.action)}</td><td>${esc(x.counterparty)}</td><td>${x.max_amount?'≤$'+x.max_amount:''} ${x.monthly_cap?'· $'+x.monthly_cap+'/30d':''} ${x.daily_action_budget?'· '+x.daily_action_budget+'/day':''}</td><td>${x.revoked_at?'revoked':`<button class="sm ghost" onclick="revoke('${esc(x.mandate_id)}')">revoke</button>`}</td></tr>`).join('');
+ $('dec7').textContent=ins.decisions_7d.map(d=>`${d.decision.replace('_',' ')} ${d.n}`).join(' · ');
+ $('ins').innerHTML=`<div class="grid2"><div><b>Price creep</b>${ins.subscription_creep.map(s=>`<div>${esc(s.merchant)}: $${s.first_price} → $${s.latest_price} <span style="color:var(--warn)">+${s.pct_change}%</span></div>`).join('')||'<div class="mut">none</div>'}</div>
+  <div><b>Paying, not using</b>${ins.idle_subscriptions.map(s=>`<div>${esc(s.merchant)} $${s.monthly}/mo · last used ${s.last_used?esc(s.last_used.slice(0,10)):'never'}</div>`).join('')||'<div class="mut">none</div>'}</div></div>
+  <div style="margin-top:8px"><b>Consent drift</b> (standing mandates used more than set up)${ins.consent_drift.filter(d=>d.recent>0).map(d=>`<div>${esc(d.mandate_id)}: ${d.recent} actions this week vs ${d.prior} last week (×${d.growth}), peak ${d.peak_day}/day vs budget ${d.budget??'∞'}</div>`).join('')}</div>`;
+}
+async function boot(){try{const me=await api('/api/me');$('who').innerHTML=`${esc(me.display_name)} · via ${esc(me.home_channel)} <button class="sm ghost" onclick="logout()">sign out</button>`;show(true);load()}catch(e){show(false)}}
+$('q').addEventListener('keydown',e=>{if(e.key==='Enter')ask()});$('pw').addEventListener('keydown',e=>{if(e.key==='Enter')login()});boot();
+</script></body></html>

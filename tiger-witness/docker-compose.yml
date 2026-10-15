@@ -1,0 +1,41 @@
+# Local full stack: TimescaleDB (with pgvector + pgvectorscale) + migrate job + seed job + API.
+# For Tiger Cloud, drop the `db` service and set TIGER_DB_URL to your service URI (see DEPLOY.md).
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-localdev}
+      POSTGRES_DB: tsdb
+    ports: ["5433:5432"]
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U postgres -d tsdb"]
+      interval: 5s
+      retries: 20
+    volumes: [witness_db:/home/postgres/pgdata]
+  migrate:
+    build: .
+    command: ["python", "-m", "witness.setup_db"]
+    environment:
+      TIGER_DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-localdev}@db:5432/tsdb
+    depends_on: { db: { condition: service_healthy } }
+  seed:
+    build: .
+    profiles: ["demo"]
+    command: ["python", "-m", "witness.simulator", "--reset"]
+    environment:
+      TIGER_DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-localdev}@db:5432/tsdb
+      WITNESS_SIGNING_KEY: ${WITNESS_SIGNING_KEY:?set WITNESS_SIGNING_KEY}
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  api:
+    build: .
+    ports: ["8103:8103"]
+    environment:
+      TIGER_DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-localdev}@db:5432/tsdb
+      WITNESS_SIGNING_KEY: ${WITNESS_SIGNING_KEY:?set WITNESS_SIGNING_KEY}
+      WITNESS_ENV: ${WITNESS_ENV:-dev}
+      WITNESS_COOKIE_SECURE: ${WITNESS_COOKIE_SECURE:-false}
+    depends_on: { migrate: { condition: service_completed_successfully } }
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+volumes:
+  witness_db: {}
