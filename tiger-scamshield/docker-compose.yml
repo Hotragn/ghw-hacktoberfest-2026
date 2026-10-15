@@ -1,0 +1,41 @@
+# Local stack. For Tiger Cloud: remove `db`, point TIGER_DB_URL at your service (see ../PRODUCTION.md).
+x-env: &env
+  TIGER_DB_URL: postgres://postgres:${POSTGRES_PASSWORD:-localdev}@db:5432/tsdb
+  SCAMSHIELD_API_KEY: ${SCAMSHIELD_API_KEY:-}
+  SCAMSHIELD_ENV: ${SCAMSHIELD_ENV:-dev}
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17
+    environment: { POSTGRES_PASSWORD: "${POSTGRES_PASSWORD:-localdev}", POSTGRES_DB: tsdb }
+    ports: ["5435:5432"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres -d tsdb"], interval: 5s, retries: 20 }
+  migrate:
+    build: .
+    command: ["python", "-m", "scamshield.setup_db"]
+    environment: *env
+    depends_on: { db: { condition: service_healthy } }
+  backfill:
+    build: .
+    profiles: ["demo"]
+    command: ["sh", "-c", "python -m scamshield.simulator --backfill-days 14 && python -m scamshield.detector"]
+    environment: *env
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  live:
+    build: .
+    profiles: ["live"]
+    command: ["python", "-m", "scamshield.simulator", "--live"]
+    environment: *env
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  detector:
+    build: .
+    profiles: ["live"]
+    command: ["python", "-m", "scamshield.detector", "--loop", "300"]
+    environment: *env
+    depends_on: { migrate: { condition: service_completed_successfully } }
+  api:
+    build: .
+    ports: ["8102:8102"]
+    environment: *env
+    read_only: true
+    security_opt: ["no-new-privileges:true"]
+    depends_on: { migrate: { condition: service_completed_successfully } }

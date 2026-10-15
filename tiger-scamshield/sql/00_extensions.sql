@@ -1,0 +1,7 @@
+CREATE EXTENSION IF NOT EXISTS timescaledb;
+CREATE EXTENSION IF NOT EXISTS vector;
+DO $$ BEGIN
+  CREATE EXTENSION IF NOT EXISTS vectorscale CASCADE;
+EXCEPTION WHEN OTHERS THEN RAISE NOTICE 'vectorscale not available here (%), falling back to pgvector HNSW', SQLERRM;
+END $$;
+CREATE SCHEMA IF NOT EXISTS scamshield;

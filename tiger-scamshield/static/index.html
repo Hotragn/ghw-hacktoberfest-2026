@@ -1,0 +1,28 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ScamShield Home</title>
+<style>
+body{font:14px system-ui,sans-serif;margin:24px;background:#fbfaf7;color:#222}
+.banner{background:#fff3cd;padding:8px 12px;border-radius:6px}
+table{border-collapse:collapse;width:100%}td,th{padding:4px 8px;border-bottom:1px solid #e5e2da;text-align:left;vertical-align:top}
+.card{background:#fff;padding:12px 16px;border-radius:8px;margin:16px 0;box-shadow:0 1px 3px #0001}
+.hi{color:#b00020;font-weight:600}button{margin-right:4px}
+</style></head><body>
+<h1>ScamShield Home</h1>
+<p class="banner">All people, devices, transactions and alerts here are <b>simulated</b>. Alerts are never sent. Only the elder can grant consent; pause and revoke are always one click, and revoking deletes their raw data.</p>
+<div class="card"><h3>Households</h3><table id="hh"></table></div>
+<div class="card"><h3>Alerts (simulated delivery)</h3><table id="alerts"></table></div>
+<div class="card"><h3>Fake profit screens vs real Coinbase BTC-USD</h3><table id="fake"></table></div>
+<div class="card"><h3>Consent audit log</h3><table id="log"></table></div>
+<script>
+const j=async(u,o={})=>{const k=sessionStorage.getItem('apikey');o.headers={...(o.headers||{}),...(k?{'Authorization':'Bearer '+k}:{})};
+const r=await fetch(u,o);if(r.status===401){const n=prompt('API key');if(n){sessionStorage.setItem('apikey',n);return j(u,o)}}return r.json()};
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=v=>typeof v==='number'?(Number.isInteger(v)?v:v.toFixed(2)):Array.isArray(v)?v.join(', '):v??'';
+function render(id,d,extra){const t=document.getElementById(id);if(!d.length){t.innerHTML='<tr><td>none</td></tr>';return}
+const c=Object.keys(d[0]);t.innerHTML='<tr>'+c.map(x=>`<th>${x}</th>`).join('')+(extra?'<th>controls</th>':'')+'</tr>'+
+d.map(r=>'<tr>'+c.map(x=>`<td class="${x==='risk'&&r[x]>=.5?'hi':''}">${esc(fmt(r[x]))}</td>`).join('')+(extra?`<td>${extra(r)}</td>`:'')+'</tr>').join('')}
+const act=(hid,a)=>{const actor=prompt('Who is doing this? (must be the household member)');if(!actor)return;
+j(`/api/households/${hid}/${a}`,{method:'POST',headers:{'content-type':'application/json'},body:JSON.stringify({actor,hours:24})}).then(load)};
+function load(){j('/api/households').then(d=>render('hh',d,r=>`<button onclick="act('${r.household_id}','pause')">pause 24h</button><button onclick="act('${r.household_id}','revoke')">revoke + delete</button>`));
+j('/api/alerts').then(d=>render('alerts',d));j('/api/fake-profit').then(d=>render('fake',d.slice(0,15)));j('/api/consent-log').then(d=>render('log',d))}
+load();setInterval(load,15000);
+</script></body></html>
