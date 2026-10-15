@@ -15,3 +15,11 @@ GRANT USAGE ON ALL SEQUENCES IN SCHEMA witness TO witness_app;
 GRANT EXECUTE ON ALL FUNCTIONS IN SCHEMA witness TO witness_app;
 -- receipts: no UPDATE/DELETE grant at all (and a trigger blocks it even for owners).
 REVOKE UPDATE, DELETE, TRUNCATE ON witness.receipts FROM witness_app;
+-- v2 (07/08): RLS tables need the app to set witness.user_id per transaction; agent_events only via views.
+GRANT SELECT, INSERT, UPDATE, DELETE ON witness.agent_tasks, witness.memory_items, witness.grants, witness.pending_approvals,
+      witness.pay_mandates, witness.api_tokens, witness.channel_links, witness.link_codes, witness.mcp_servers,
+      witness.connectors TO witness_app;
+GRANT SELECT, INSERT ON witness.payments, witness.memory_forget_log TO witness_app;
+REVOKE SELECT ON witness.agent_events, witness.habits_daily FROM witness_app;
+GRANT INSERT ON witness.agent_events TO witness_app;
+GRANT SELECT ON witness.my_agent_events, witness.my_habits TO witness_app;
