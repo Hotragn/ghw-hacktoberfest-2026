@@ -1,0 +1,29 @@
+<!doctype html><html><head><meta charset="utf-8"><title>ToolTruth</title>
+<style>
+body{font:14px system-ui,sans-serif;margin:24px;background:#0f1115;color:#e6e6e6}
+h1{margin:0 0 4px}small{color:#999}section{margin:20px 0}
+table{border-collapse:collapse;width:100%}td,th{padding:4px 8px;border-bottom:1px solid #2a2d35;text-align:left}
+th{color:#9ab}.bad{color:#ff6b6b;font-weight:600}.card{background:#171a21;padding:12px 16px;border-radius:8px}
+input,button{background:#222;color:#eee;border:1px solid #444;padding:4px 8px}
+</style></head><body>
+<h1>ToolTruth</h1><small>Runtime behaviour fingerprinting of third-party MCP tools &middot; Tiger Cloud (TimescaleDB + pgvector) &middot; simulated fleet</small>
+<section class="card"><h3>Tools behaving like known-bad (vector similarity)</h3>
+namespace <input id="ns" placeholder="any"> max distance <input id="md" value="0.05" size="5"> <button onclick="loadSuspects()">search</button>
+<table id="suspects"></table></section>
+<section class="card"><h3>New destinations (last 12h, never seen in baseline)</h3><table id="dests"></table></section>
+<section class="card"><h3>Tool health (24h, continuous aggregate)</h3><table id="health"></table></section>
+<section class="card"><h3>Org spend (USD, OpenRouter + Coinbase ETH priced)</h3><table id="orgs"></table></section>
+<script>
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const fmt=v=>typeof v==='number'?(Math.abs(v)<1?v.toPrecision(3):v.toFixed(1)):Array.isArray(v)?v.join(', '):v??'';
+function render(id,data,bad){const t=document.getElementById(id);if(!data.length){t.innerHTML='<tr><td>none</td></tr>';return}
+const cols=Object.keys(data[0]);t.innerHTML='<tr>'+cols.map(c=>`<th>${c}</th>`).join('')+'</tr>'+
+data.map(r=>'<tr'+(bad?' class="bad"':'')+'>'+cols.map(c=>`<td>${esc(fmt(r[c]))}</td>`).join('')+'</tr>').join('')}
+const j=async u=>{const k=sessionStorage.getItem('apikey');const r=await fetch(u,{headers:k?{'Authorization':'Bearer '+k}:{}});
+if(r.status===401){const n=prompt('API key');if(n){sessionStorage.setItem('apikey',n);return j(u)}}return r.json()};
+function loadSuspects(){const ns=document.getElementById('ns').value,md=document.getElementById('md').value;
+j(`/api/suspects?max_distance=${encodeURIComponent(md)}`+(ns?`&ns=${encodeURIComponent(ns)}`:'')).then(d=>render('suspects',d,true))}
+function load(){loadSuspects();j('/api/new-destinations').then(d=>render('dests',d,true));
+j('/api/health').then(d=>render('health',d.slice(0,20)));j('/api/orgs').then(d=>render('orgs',d))}
+load();setInterval(load,15000);
+</script></body></html>
