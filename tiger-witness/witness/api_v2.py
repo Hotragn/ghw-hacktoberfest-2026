@@ -2,6 +2,7 @@
 API tokens, MCP servers, connectors, and channel webhooks (Telegram, WhatsApp, iMessage relay, signed webhook)."""
 from __future__ import annotations
 import json
+import os
 import secrets
 import uuid
 from datetime import datetime, timedelta, timezone
@@ -11,7 +12,7 @@ from fastapi.responses import PlainTextResponse
 from pydantic import BaseModel, Field
 
 from tigerprod import token_hash
-from witness import channels, consent, llm, memory, payments
+from witness import channels, consent, jobs, llm, memory, passkeys, payments
 from witness.db import user_tx
 from witness.runtime import Agent
 from witness.tools import Services
@@ -23,6 +24,19 @@ class ChatIn(BaseModel):
 
 class DecideIn(BaseModel):
     approve: bool
+    challenge_id: str | None = None
+    credential: dict | None = None
+
+
+class PasskeyFinish(BaseModel):
+    challenge_id: str
+    credential: dict
+    name: str = Field(default="passkey", max_length=60)
+
+
+class AssertionIn(BaseModel):
+    challenge_id: str
+    credential: dict
 
 
 class MemoryIn(BaseModel):
@@ -130,12 +144,56 @@ def install(app, pool, current_user, state: dict):
         async with user_tx(pool(), uid) as c:
             return await consent.list_approvals(c, uid, None if status == "all" else status)
 
+    @r.post("/approvals/{approval_id}/passkey-options")
+    async def approval_passkey_options(approval_id: uuid.UUID, uid: str = Depends(current_user)):
+        async with user_tx(pool(), uid) as c:
+            a = await consent.get_pending(c, uid, str(approval_id))
+            if not a:
+                raise HTTPException(404, "no pending approval")
+            try:
+                return await passkeys.begin_assertion(c, uid, "approval", str(approval_id), consent.approval_sha256(a))
+            except passkeys.PasskeyError as e:
+                raise HTTPException(409, str(e)) from None
+
     @r.post("/approvals/{approval_id}")
     async def decide(approval_id: uuid.UUID, body: DecideIn, uid: str = Depends(current_user)):
+        evidence = None
+        if body.approve and body.credential:
+            async with user_tx(pool(), uid) as c:
+                a = await consent.get_pending(c, uid, str(approval_id))
+                if not a:
+                    raise HTTPException(409, "no pending approval")
+                try:
+                    evidence = await passkeys.finish_assertion(c, uid, body.challenge_id or "", body.credential, "approval",
+                                                               str(approval_id), consent.approval_sha256(a))
+                except (passkeys.PasskeyError, ValueError) as e:
+                    raise HTTPException(401, str(e)) from None
         try:
-            return await agent().decide(uid, str(approval_id), body.approve)
+            return await agent().decide(uid, str(approval_id), body.approve, evidence)
+        except passkeys.PasskeyRequired as e:
+            raise HTTPException(428, str(e)) from None
         except ValueError as e:
             raise HTTPException(409, str(e)) from None
+
+    # ---- passkeys (WebAuthn)
+    @r.get("/passkeys")
+    async def pk_list(uid: str = Depends(current_user)):
+        async with user_tx(pool(), uid) as c:
+            return await passkeys.list_passkeys(c, uid)
+
+    @r.post("/passkeys/register/options")
+    async def pk_reg_options(uid: str = Depends(current_user)):
+        email = await pool().fetchval("SELECT email FROM accounts WHERE user_id=$1", uid) or uid
+        async with user_tx(pool(), uid) as c:
+            return await passkeys.begin_registration(c, uid, email, email)
+
+    @r.post("/passkeys/register/verify", status_code=201)
+    async def pk_reg_verify(body: PasskeyFinish, uid: str = Depends(current_user)):
+        try:
+            async with user_tx(pool(), uid) as c:
+                return await passkeys.finish_registration(c, uid, body.challenge_id, body.credential, body.name)
+        except (passkeys.PasskeyError, ValueError) as e:
+            raise HTTPException(400, str(e)) from None
 
     # ---- memory
     @r.get("/memory")
@@ -201,11 +259,46 @@ def install(app, pool, current_user, state: dict):
     async def pm_add(body: PayMandateIn, uid: str = Depends(current_user)):
         try:
             async with user_tx(pool(), uid) as c:
-                return await payments.create_open_mandate(c, uid, body.description, body.merchants, body.max_per_txn,
-                                                          body.budget, body.ttl_days, body.currency, body.window_days,
-                                                          body.human_present_required)
+                need = await passkeys.has_passkey(c, uid) or os.environ.get("WITNESS_REQUIRE_PASSKEY", "false").lower() == "true"
+                m = await payments.create_open_mandate(c, uid, body.description, body.merchants, body.max_per_txn,
+                                                       body.budget, body.ttl_days, body.currency, body.window_days,
+                                                       body.human_present_required, passkey_required=need)
+                if need:  # the mandate is inactive until the user signs its hash with a passkey
+                    try:
+                        m["passkey_challenge"] = await passkeys.begin_assertion(c, uid, "mandate", m["mandate_id"],
+                                                                                payments.mandate_sha256(m["content"]))
+                    except passkeys.PasskeyError:
+                        m["passkey_challenge"] = None  # required by env but no passkey yet: register one, then /confirm-options
+                return m
         except payments.PaymentError as e:
             raise HTTPException(422, str(e)) from None
+
+    @r.post("/payment-mandates/{mandate_id}/confirm-options")
+    async def pm_confirm_options(mandate_id: str, uid: str = Depends(current_user)):
+        async with user_tx(pool(), uid) as c:
+            row = await c.fetchrow("SELECT content FROM pay_mandates WHERE mandate_id=$1 AND user_id=$2 AND revoked_at IS NULL",
+                                   mandate_id, uid)
+            if not row:
+                raise HTTPException(404, "no active mandate")
+            try:
+                return await passkeys.begin_assertion(c, uid, "mandate", mandate_id, payments.mandate_sha256(json.loads(row["content"])))
+            except passkeys.PasskeyError as e:
+                raise HTTPException(409, str(e)) from None
+
+    @r.post("/payment-mandates/{mandate_id}/confirm")
+    async def pm_confirm(mandate_id: str, body: AssertionIn, uid: str = Depends(current_user)):
+        try:
+            async with user_tx(pool(), uid) as c:
+                row = await c.fetchrow("SELECT content FROM pay_mandates WHERE mandate_id=$1 AND user_id=$2", mandate_id, uid)
+                if not row:
+                    raise HTTPException(404, "no such mandate")
+                ev = await passkeys.finish_assertion(c, uid, body.challenge_id, body.credential, "mandate", mandate_id,
+                                                     payments.mandate_sha256(json.loads(row["content"])))
+                m = await payments.confirm_with_passkey(c, uid, mandate_id, ev)
+                m["passkey_evidence_valid"] = passkeys.verify_evidence(ev)
+                return m
+        except (passkeys.PasskeyError, payments.PaymentError) as e:
+            raise HTTPException(401, str(e)) from None
 
     @r.post("/payment-mandates/{mandate_id}/revoke")
     async def pm_revoke(mandate_id: str, uid: str = Depends(current_user)):
@@ -314,8 +407,11 @@ def install(app, pool, current_user, state: dict):
 
     # ---- public channel webhooks (authenticated by channel-specific signatures, never by session)
     async def _route(inbs, background: BackgroundTasks, channel: str):
-        for inb in inbs:
-            background.add_task(channels.handle, pool(), agent(), inb, senders().get(channel))
+        """Durable hand-off: persist to the job queue and ACK immediately; witness.worker processes it."""
+        async with pool().acquire() as c:
+            for inb in inbs:
+                payload, key = inb.job()
+                await jobs.enqueue(c, "channel", payload, key)
 
     @app.post("/channels/telegram/webhook")
     async def tg_hook(req: Request, background: BackgroundTasks,

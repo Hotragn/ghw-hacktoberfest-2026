@@ -13,7 +13,7 @@ import uuid
 from datetime import datetime, timezone
 from decimal import Decimal
 
-from witness import consent, firewall, i18n, memory, payments
+from witness import consent, firewall, i18n, memory, passkeys, payments
 from witness.agent import append_receipt
 from witness.db import user_tx
 from witness.llm import Provider, ToolCall
@@ -167,6 +167,9 @@ class Agent:
     async def _loop(self, user: str, task: dict, msgs: list[dict], pending: list[dict] | None = None) -> dict:
         lang, tid = task["lang"], task["task_id"]
         trace = []
+        done_calls: dict[str, str] = {}  # (tool, args) -> result: identical repeats are never re-executed
+        force_answer = False
+        last_failure = None
         async with user_tx(self.pool, user) as conn:
             reg = await self._registry(conn, user)
         try:
@@ -176,17 +179,31 @@ class Agent:
                     if task["steps"] >= MAX_STEPS:
                         reply = "I stopped after the maximum number of steps; here is what I have so far."
                         break
-                    comp = await self.provider.complete(_clean(msgs), reg.specs(), lang)
+                    comp = await self.provider.complete(_clean(msgs), [] if force_answer else reg.specs(), lang)
                     task["steps"] += 1
+                    if force_answer and comp.tool_calls:  # model ignored the instruction: answer from the last result
+                        comp.tool_calls, comp.content = [], comp.content or i18n.phrase("done", lang)
+                    if force_answer and last_failure and not comp.tool_calls:
+                        why = last_failure.split(": ", 1)[-1]
+                        comp.content = i18n.phrase("blocked", lang, why=why) + ("\n" + comp.content if comp.content else "")
                     if not comp.tool_calls:
                         reply = comp.content or i18n.phrase("done", lang)
                         break
-                    msgs.append({"role": "assistant", "content": comp.content, "_trust": "model",
+                    msgs.append({"role": "assistant", "content": comp.content or "", "_trust": "model",
                                  "tool_calls": [{"id": c.id, "type": "function", "function": {
                                      "name": c.name, "arguments": json.dumps(c.arguments)}} for c in comp.tool_calls]})
                     queue = list(comp.tool_calls)
                 call = queue.pop(0)
                 tool = reg.get(call.name)
+                key = call.name + json.dumps(call.arguments, sort_keys=True, default=str)
+                if key in done_calls:
+                    msgs.append({"role": "tool", "tool_call_id": call.id, "_trust": "tool",
+                                 "content": "DUPLICATE: this exact call was already attempted in this task. Its result was: "
+                                            + done_calls[key][:500] + "\nDo not call it again; reply to the user now."})
+                    force_answer = True
+                    if done_calls[key].startswith(("BLOCKED", "ERROR")):  # never let a retry storm hide the real reason
+                        last_failure = done_calls[key]
+                    continue
                 async with user_tx(self.pool, user) as conn:
                     pre_approved = call.id in {p["id"] for p in (pending or []) if p.get("approved")}
                     g = await gate(conn, user, tool, call.arguments, task, msgs)
@@ -205,6 +222,7 @@ class Agent:
                         task["tainted"] = task["tainted"] or tainted
                         msgs.append({"role": "tool", "tool_call_id": call.id, "content": content,
                                      "_trust": "untrusted" if tainted else "tool"})
+                        done_calls[key] = content  # successes AND errors: an identical retry is never useful
                         rc = await _receipt(conn, user, tid, call, "executed" if outcome["ok"] else "error", g["reasons"],
                                             outcome, task["tainted"])
                         trace.append({"tool": call.name, "verdict": "executed" if outcome["ok"] else "error",
@@ -213,10 +231,12 @@ class Agent:
                         why = "; ".join(str(r["detail"]) for r in g["reasons"] if r["outcome"] == "deny")
                         msgs.append({"role": "tool", "tool_call_id": call.id, "content": f"BLOCKED by policy: {why}",
                                      "_trust": "tool"})
+                        done_calls[key] = f"BLOCKED by policy: {why}"
                         rc = await _receipt(conn, user, tid, call, "blocked", g["reasons"], None, task["tainted"])
                         trace.append({"tool": call.name, "verdict": "blocked", "receipt_seq": rc["seq"], "reasons": g["reasons"]})
                     else:
-                        ap = await consent.park(conn, user, tid, call.id, call.name, call.arguments, g["reasons"])
+                        risk = "high" if tool is not None and (tool.scope == "spend" or tool.egress) else "normal"
+                        ap = await consent.park(conn, user, tid, call.id, call.name, call.arguments, g["reasons"], risk=risk)
                         rest = [{"id": c.id, "name": c.name, "arguments": c.arguments} for c in queue]
                         msgs.append({"role": "system", "_trust": "system", "_pending": [
                             {"id": call.id, "name": call.name, "arguments": call.arguments,
@@ -243,11 +263,14 @@ class Agent:
         return {"task_id": str(task["task_id"]), "status": status, "reply": reply, "lang": task["lang"],
                 "tainted": task["tainted"], "steps": trace, "approval_id": approval_id}
 
-    async def decide(self, user: str, approval_id: str, approve: bool) -> dict:
+    async def decide(self, user: str, approval_id: str, approve: bool, passkey_evidence: dict | None = None) -> dict:
         """Resume a parked task. Approval re-runs the gate (consent/mandate can have changed) but lets the human
         override 'approval' verdicts; 'deny' verdicts (no mandate, bad reputation) can never be overridden."""
         async with user_tx(self.pool, user) as conn:
-            ap = await consent.decide(conn, user, approval_id, approve)
+            pend = await consent.get_pending(conn, user, approval_id)
+            if approve and pend and pend["risk"] == "high" and await passkeys.has_passkey(conn, user) and not passkey_evidence:
+                raise passkeys.PasskeyRequired("this is a high-risk action: confirm it with your passkey")
+            ap = await consent.decide(conn, user, approval_id, approve, passkey_evidence)
             if not ap:
                 raise ValueError("no pending approval with that id (already decided, expired, or not yours)")
             t = await conn.fetchrow("SELECT * FROM agent_tasks WHERE task_id=$1 AND user_id=$2", uuid.UUID(ap["task_id"]), user)
@@ -256,7 +279,9 @@ class Agent:
                                    t["task_id"], tool=ap["tool"], channel=t["channel"], lang=t["lang"])
             await append_receipt(conn, user, uuid.uuid4(), _now(), {"kind": "human_decision", "approval_id": approval_id,
                                  "task_id": ap["task_id"], "tool": ap["tool"], "args": ap["args"],
-                                 "decision": "approved" if approve else "denied", "at": _now().isoformat()})
+                                 "decision": "approved" if approve else "denied", "at": _now().isoformat(),
+                                 "passkey": {k: passkey_evidence[k] for k in ("credential_id", "bound_sha256", "signature")}
+                                 if passkey_evidence else None})
         pend_msg = msgs.pop() if msgs and msgs[-1].get("_pending") else {"_pending": []}
         pending = pend_msg["_pending"]
         task = {"task_id": t["task_id"], "lang": t["lang"], "channel": t["channel"], "tainted": t["tainted"], "steps": t["steps"]}

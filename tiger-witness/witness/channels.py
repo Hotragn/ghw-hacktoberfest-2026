@@ -29,6 +29,12 @@ class Inbound:
     external_id: str
     text: str
     approval_action: tuple[str, bool] | None = None  # (approval_id, approve) from a button tap
+    message_id: str | None = None                    # provider message id: queue dedupe key (webhook retries are no-ops)
+
+    def job(self) -> tuple[dict, str | None]:
+        return ({"channel": self.channel, "external_id": self.external_id, "text": self.text,
+                 "approval_action": list(self.approval_action) if self.approval_action else None, "message_id": self.message_id},
+                f"{self.channel}:{self.message_id}" if self.message_id else None)
 
 
 # ------------------------------------------------------------------ senders
@@ -107,11 +113,12 @@ def telegram_parse(update: dict) -> Inbound | None:
         m = re.fullmatch(r"([ad]):([0-9a-f-]{36})", cq.get("data", ""))
         chat = (cq.get("message") or {}).get("chat", {}).get("id") or cq.get("from", {}).get("id")
         if m and chat:
-            return Inbound("telegram", str(chat), "", (m.group(2), m.group(1) == "a"))
+            return Inbound("telegram", str(chat), "", (m.group(2), m.group(1) == "a"), f"cb{cq.get('id', '')}" if cq.get("id") else None)
         return None
     msg = update.get("message") or update.get("edited_message")
     if msg and msg.get("text") and msg.get("chat"):
-        return Inbound("telegram", str(msg["chat"]["id"]), msg["text"])
+        return Inbound("telegram", str(msg["chat"]["id"]), msg["text"],
+                       message_id=str(update["update_id"]) if "update_id" in update else None)
     return None
 
 
@@ -134,12 +141,12 @@ def whatsapp_parse(payload: dict) -> list[Inbound]:
         for ch in entry.get("changes", []):
             for m in (ch.get("value") or {}).get("messages", []) or []:
                 if m.get("type") == "text":
-                    out.append(Inbound("whatsapp", m["from"], m["text"]["body"]))
+                    out.append(Inbound("whatsapp", m["from"], m["text"]["body"], message_id=m.get("id")))
                 elif m.get("type") == "interactive":
                     rid = (m["interactive"].get("button_reply") or {}).get("id", "")
                     mm = re.fullmatch(r"([ad]):([0-9a-f-]{36})", rid)
                     if mm:
-                        out.append(Inbound("whatsapp", m["from"], "", (mm.group(2), mm.group(1) == "a")))
+                        out.append(Inbound("whatsapp", m["from"], "", (mm.group(2), mm.group(1) == "a"), m.get("id")))
     return out
 
 
@@ -155,7 +162,7 @@ def imessage_parse(payload: dict) -> Inbound | None:
         return None  # never react to our own outgoing messages (loop guard)
     chats = d.get("chats") or []
     guid = chats[0]["guid"] if chats else f"iMessage;-;{(d.get('handle') or {}).get('address', '')}"
-    return Inbound("imessage", guid, d["text"])
+    return Inbound("imessage", guid, d["text"], message_id=d.get("guid"))
 
 
 def webhook_secret(user_id: str) -> str:
@@ -230,7 +237,14 @@ async def handle(pool, agent, inb: Inbound, sender=None) -> dict:
         return await reply("This chat isn't linked yet. In the Witness web app open Channels, create a code, then send: link <CODE>")
     decision = inb.approval_action or await text_decision(pool, user, inb.text)
     if decision:
-        res = await agent.decide(user, decision[0], decision[1])
+        from witness.passkeys import PasskeyRequired
+        try:
+            res = await agent.decide(user, decision[0], decision[1])
+        except PasskeyRequired:
+            url = os.environ.get("WITNESS_PUBLIC_URL", "").rstrip("/") + "/app#approvals"
+            return {**await reply(f"This one needs your passkey. Confirm it here: {url}"), "user_id": user, "status": "passkey_required"}
+        except ValueError as e:
+            return {**await reply(str(e)), "user_id": user, "status": "error"}
     else:
         res = await agent.run(user, inb.text, channel=inb.channel)
     out = await reply(res["reply"], res.get("approval_id"))

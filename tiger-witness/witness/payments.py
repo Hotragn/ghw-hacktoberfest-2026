@@ -142,14 +142,14 @@ def _row(r) -> dict:
             d[k] = str(v)
         elif isinstance(v, timedelta):
             d[k] = v.total_seconds()
-        elif k in ("content", "checkout", "closed_mandate") and isinstance(v, str):
+        elif k in ("content", "checkout", "closed_mandate", "passkey_assertion") and isinstance(v, str):
             d[k] = json.loads(v)
     return d
 
 
 async def create_open_mandate(conn, user: str, description: str, merchants: list[str], max_per_txn: float,
                               budget: float, ttl_days: float = 30, currency: str = "USD", window_days: int = 30,
-                              human_present_required: bool = False) -> dict:
+                              human_present_required: bool = False, passkey_required: bool = False) -> dict:
     if not merchants or any(m.strip() in ("", "*") for m in merchants):
         raise PaymentError("an explicit merchant allowlist is required (no bare '*')")
     if max_per_txn <= 0 or budget <= 0 or max_per_txn > budget:
@@ -159,7 +159,7 @@ async def create_open_mandate(conn, user: str, description: str, merchants: list
     content = {"type": "open_checkout_payment_mandate", "ap2_model": "v0.2-open", "mandate_id": mid, "user_id": user,
                "description": description, "merchants": sorted(m.lower() for m in merchants), "currency": currency,
                "max_per_txn": f"{max_per_txn:.2f}", "budget": f"{budget:.2f}", "budget_window_days": window_days,
-               "human_present_required": human_present_required, "exp": exp.isoformat(),
+               "human_present_required": human_present_required, "passkey_required": passkey_required, "exp": exp.isoformat(),
                "cnf": {"agent_public_key_sha256": hashlib.sha256(agent_public_pem().encode()).hexdigest()}}
     r = await conn.fetchrow("""INSERT INTO pay_mandates (mandate_id,user_id,description,merchants,currency,max_per_txn,budget,
         budget_window,human_present_required,content,user_signature,expires_at)
@@ -191,6 +191,9 @@ async def check(conn, user: str, merchant: str, amount: Decimal, currency: str) 
         AND currency=$2 ORDER BY max_per_txn""", user, currency):
         if surface_sign(json.loads(r["content"])) != r["user_signature"]:
             reasons.append({"mandate": r["mandate_id"], "fail": "mandate signature invalid (tampered)"})
+            continue
+        if json.loads(r["content"]).get("passkey_required") and not r["passkey_confirmed_at"]:
+            reasons.append({"mandate": r["mandate_id"], "fail": "mandate awaiting your passkey confirmation"})
             continue
         if not merchant_allowed(merchant, list(r["merchants"])):
             reasons.append({"mandate": r["mandate_id"], "fail": f"merchant {merchant} not in allowlist"})
@@ -238,4 +241,16 @@ async def execute(conn, rail: PaymentRail, user: str, mandate: dict, merchant: s
         VALUES ($1,$2,$3,$4,$5,$6,$7::jsonb,$8,$9::jsonb,$10,$11,$12,$13,$14) RETURNING *""", uuid.uuid4(), user,
         mandate["mandate_id"], merchant.lower(), amount, currency, json.dumps(checkout), chash, json.dumps(closed), sig,
         rail.name, res.provider_ref, res.status if res.ok or res.status != "settled" else "failed", idempotency_key)
+    return _row(r)
+
+
+def mandate_sha256(content: dict) -> str:
+    return hashlib.sha256(canonical(content)).hexdigest()
+
+
+async def confirm_with_passkey(conn, user: str, mandate_id: str, evidence: dict) -> dict:
+    r = await conn.fetchrow("""UPDATE pay_mandates SET passkey_assertion=$3::jsonb, passkey_confirmed_at=now()
+        WHERE mandate_id=$1 AND user_id=$2 AND revoked_at IS NULL RETURNING *""", mandate_id, user, json.dumps(evidence))
+    if not r:
+        raise PaymentError("no active mandate with that id")
     return _row(r)

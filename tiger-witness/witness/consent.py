@@ -15,7 +15,7 @@ def _row(r) -> dict:
             d[k] = v.isoformat()
         elif isinstance(v, uuid.UUID):
             d[k] = str(v)
-    for k in ("args", "reasons"):
+    for k in ("args", "reasons", "passkey_assertion"):
         if isinstance(d.get(k), str):
             d[k] = json.loads(d[k])
     return d
@@ -57,10 +57,10 @@ async def consume_grant(conn, grant_id: str) -> None:
 
 
 async def park(conn, user: str, task_id: uuid.UUID, call_id: str, tool: str, args: dict, reasons: list,
-               ttl_hours: float = 48) -> dict:
-    r = await conn.fetchrow("""INSERT INTO pending_approvals (approval_id,user_id,task_id,call_id,tool,args,reasons,expires_at)
-        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8) RETURNING *""", uuid.uuid4(), user, task_id, call_id, tool,
-        json.dumps(args), json.dumps(reasons), datetime.now(timezone.utc) + timedelta(hours=ttl_hours))
+               ttl_hours: float = 48, risk: str = "normal") -> dict:
+    r = await conn.fetchrow("""INSERT INTO pending_approvals (approval_id,user_id,task_id,call_id,tool,args,reasons,expires_at,risk)
+        VALUES ($1,$2,$3,$4,$5,$6::jsonb,$7::jsonb,$8,$9) RETURNING *""", uuid.uuid4(), user, task_id, call_id, tool,
+        json.dumps(args), json.dumps(reasons), datetime.now(timezone.utc) + timedelta(hours=ttl_hours), risk)
     return _row(r)
 
 
@@ -71,8 +71,21 @@ async def list_approvals(conn, user: str, status: str | None = "pending") -> lis
     return [_row(r) for r in await conn.fetch(q, *([user, status] if status else [user]))]
 
 
-async def decide(conn, user: str, approval_id: str, approve: bool) -> dict | None:
-    r = await conn.fetchrow("""UPDATE pending_approvals SET status=$3, decided_at=now() WHERE approval_id=$1 AND user_id=$2
-        AND status='pending' AND expires_at > now() RETURNING *""", uuid.UUID(approval_id), user,
-        "approved" if approve else "denied")
+def approval_sha256(a: dict) -> str:
+    """Hash of exactly what the user is approving (bound into the passkey challenge)."""
+    from witness.passkeys import canonical_sha256
+    return canonical_sha256({"approval_id": str(a["approval_id"]), "tool": a["tool"],
+                             "args": a["args"] if isinstance(a["args"], dict) else json.loads(a["args"])})
+
+
+async def get_pending(conn, user: str, approval_id: str) -> dict | None:
+    r = await conn.fetchrow("""SELECT * FROM pending_approvals WHERE approval_id=$1 AND user_id=$2 AND status='pending'
+        AND expires_at > now()""", uuid.UUID(approval_id), user)
+    return _row(r) if r else None
+
+
+async def decide(conn, user: str, approval_id: str, approve: bool, passkey_evidence: dict | None = None) -> dict | None:
+    r = await conn.fetchrow("""UPDATE pending_approvals SET status=$3, decided_at=now(), passkey_assertion=$4::jsonb
+        WHERE approval_id=$1 AND user_id=$2 AND status='pending' AND expires_at > now() RETURNING *""", uuid.UUID(approval_id), user,
+        "approved" if approve else "denied", json.dumps(passkey_evidence) if passkey_evidence else None)
     return _row(r) if r else None
