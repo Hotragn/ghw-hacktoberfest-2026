@@ -150,7 +150,13 @@ def _chat_reply(text: str, lang: str) -> str:
             "Configure WITNESS_LLM_BASE_URL/WITNESS_LLM_API_KEY for open-ended tasks.")
 
 
-def from_env(transport=None) -> Provider:
+def from_env(transport=None, pool=None) -> Provider:
+    """Pooled zero-friction router when any server-side provider key is configured (see witness.router), else a
+    single OpenAI-compatible endpoint, else the offline planner."""
+    from witness import router
+    r = router.from_env(pool=pool, transport=transport)
+    if r is not None and os.environ.get("WITNESS_ROUTER", "auto") != "off":
+        return r
     base, key = os.environ.get("WITNESS_LLM_BASE_URL"), os.environ.get("WITNESS_LLM_API_KEY")
     if base and key:
         return OpenAICompatProvider(base, key, os.environ.get("WITNESS_LLM_MODEL", "gpt-4o-mini"), transport=transport)
