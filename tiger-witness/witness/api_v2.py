@@ -105,7 +105,7 @@ def install(app, pool, current_user, state: dict):
 
     def agent() -> Agent:
         if "agent" not in state:
-            state["agent"] = Agent(pool(), state.get("provider") or llm.from_env(), state.get("services") or Services())
+            state["agent"] = Agent(pool(), state.get("provider") or llm.from_env(pool=pool()), state.get("services") or Services())
         a = state["agent"]
         a.pool = pool()
         return a
@@ -118,10 +118,16 @@ def install(app, pool, current_user, state: dict):
     # ---- chat + tasks
     @r.post("/chat")
     async def chat(body: ChatIn, uid: str = Depends(current_user)):
+        from witness import deferral
+        from witness.router import QuotaExhausted
         try:
             return await agent().run(uid, body.message, channel="web")
         except ValueError as e:
             raise HTTPException(422, str(e)) from None
+        except QuotaExhausted as q:  # every free provider is out: park durably, answer when quota resets
+            when, _ = await deferral.defer_turn(pool(), uid, {"channel": "web", "text": body.message}, q.retry_at)
+            return {"task_id": None, "status": "deferred", "reply": deferral.saved_message(when), "retry_at": when,
+                    "steps": [], "approval_id": None}
 
     @r.get("/tasks")
     async def tasks(limit: int = Query(30, ge=1, le=200), uid: str = Depends(current_user)):

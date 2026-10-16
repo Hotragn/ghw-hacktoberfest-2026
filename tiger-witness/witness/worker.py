@@ -20,13 +20,25 @@ def handlers(pool, agent, senders) -> dict:
 
     async def re_embed(p: dict):
         await reembed.run(pool, int(p.get("batch", 64)))
-    return {"channel": channel, "reembed": re_embed}
+
+    async def deferred(p: dict):
+        """Turns parked on quota exhaustion. Web turns have no sender: the result lands in /api/v2/tasks."""
+        from witness.router import QuotaExhausted
+        if p.get("channel") == "web":
+            try:
+                await agent.run(p["user_id"], p["text"], channel="web")
+            except QuotaExhausted as q:
+                raise jobs.Defer(q.retry_at) from None
+            return
+        inb = channels.Inbound(p["channel"], p["external_id"], p.get("text", ""), None, p.get("message_id"))
+        await channels.handle(pool, agent, inb, senders.get(inb.channel), deferred=True)
+    return {"channel": channel, "reembed": re_embed, "deferred": deferred}
 
 
 async def main():
     setup_logging()
     pool = await make_pool("witness", max_size=int(os.environ.get("WITNESS_DB_POOL", "10")))
-    agent = Agent(pool, llm.from_env(), Services())
+    agent = Agent(pool, llm.from_env(pool=pool), Services())
     await jobs.Worker(pool, handlers(pool, agent, channels.senders_from_env())).run_forever()
 
 if __name__ == "__main__":

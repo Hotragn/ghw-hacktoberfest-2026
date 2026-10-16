@@ -15,9 +15,21 @@ log = logging.getLogger("witness.jobs")
 CHANNEL = "witness_jobs"
 
 
-async def enqueue(conn, queue: str, payload: dict, dedupe_key: str | None = None, max_attempts: int = 5) -> int | None:
-    jid = await conn.fetchval("""INSERT INTO witness.jobs (queue,payload,dedupe_key,max_attempts) VALUES ($1,$2::jsonb,$3,$4)
-        ON CONFLICT (dedupe_key) DO NOTHING RETURNING job_id""", queue, json.dumps(payload, default=str), dedupe_key, max_attempts)
+class Defer(Exception):
+    """Raised by a handler to park its job until run_after (unix ts) without spending a retry attempt
+    (e.g. every LLM provider is out of quota until its reset)."""
+
+    def __init__(self, run_after: float):
+        super().__init__(f"deferred until {run_after:.0f}")
+        self.run_after = run_after
+
+
+async def enqueue(conn, queue: str, payload: dict, dedupe_key: str | None = None, max_attempts: int = 5,
+                  run_after: float | None = None) -> int | None:
+    jid = await conn.fetchval("""INSERT INTO witness.jobs (queue,payload,dedupe_key,max_attempts,run_after)
+        VALUES ($1,$2::jsonb,$3,$4,COALESCE(to_timestamp($5::float8), now()))
+        ON CONFLICT (dedupe_key) DO NOTHING RETURNING job_id""", queue, json.dumps(payload, default=str), dedupe_key,
+                              max_attempts, run_after)
     if jid:
         await conn.execute("SELECT pg_notify($1, $2)", CHANNEL, queue)
     return jid
@@ -42,6 +54,11 @@ async def fail(pool, job, err: str) -> str:
     return "dead" if dead else "retry"
 
 
+async def reschedule(pool, job_id: int, run_after: float) -> None:
+    await pool.execute("""UPDATE witness.jobs SET status='queued', locked_at=NULL, locked_by=NULL,
+        attempts=greatest(0, attempts-1), run_after=to_timestamp($2::float8) WHERE job_id=$1""", job_id, run_after)
+
+
 async def reap_stale(pool, older_than_s: int = 300) -> int:
     r = await pool.execute("""UPDATE witness.jobs SET status='queued', locked_at=NULL, locked_by=NULL
         WHERE status='running' AND locked_at < now() - make_interval(secs => $1)""", older_than_s)
@@ -61,6 +78,9 @@ class Worker:
         try:
             await self.handlers[job["queue"]](json.loads(job["payload"]))
             await complete(self.pool, job["job_id"])
+        except Defer as d:
+            await reschedule(self.pool, job["job_id"], d.run_after)
+            log.info("job %s %s deferred until %.0f", job["job_id"], job["queue"], d.run_after)
         except Exception as e:  # noqa: BLE001
             outcome = await fail(self.pool, job, f"{type(e).__name__}: {e}\n{traceback.format_exc(limit=3)}")
             log.warning("job %s %s failed (%s): %s", job["job_id"], job["queue"], outcome, e)

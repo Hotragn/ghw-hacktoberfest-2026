@@ -26,3 +26,5 @@ GRANT SELECT ON witness.my_agent_events, witness.my_habits TO witness_app;
 -- v3 (09)
 GRANT SELECT, INSERT, UPDATE, DELETE ON witness.webauthn_credentials, witness.webauthn_challenges, witness.jobs TO witness_app;
 GRANT SELECT, INSERT ON witness.embedding_models TO witness_app;
+-- v3.1 (10)
+GRANT SELECT, INSERT, UPDATE ON witness.llm_usage, witness.llm_users TO witness_app;

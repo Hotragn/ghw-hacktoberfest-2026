@@ -222,8 +222,11 @@ async def text_decision(pool, user: str, text: str) -> tuple[str, bool] | None:
     return (aid, m.group(1) in ("approve", "yes")) if aid else None
 
 
-async def handle(pool, agent, inb: Inbound, sender=None) -> dict:
-    """Route one inbound chat message through linking, approvals and the agent; reply via the channel's sender."""
+async def handle(pool, agent, inb: Inbound, sender=None, deferred: bool = False) -> dict:
+    """Route one inbound chat message through linking, approvals and the agent; reply via the channel's sender.
+    If every model provider is out of quota the turn is parked in the durable queue and the user gets
+    "Saved, I'll reply by ~HH:MM"; when re-run from that queue (deferred=True) exhaustion re-parks the job."""
+    from witness.router import QuotaExhausted
     async def reply(text, approval_id=None):
         if sender:
             await sender.send(inb.external_id, text, approval_id)
@@ -246,6 +249,15 @@ async def handle(pool, agent, inb: Inbound, sender=None) -> dict:
         except ValueError as e:
             return {**await reply(str(e)), "user_id": user, "status": "error"}
     else:
-        res = await agent.run(user, inb.text, channel=inb.channel)
+        try:
+            res = await agent.run(user, inb.text, channel=inb.channel)
+        except QuotaExhausted as q:
+            if deferred:
+                from witness.jobs import Defer
+                raise Defer(q.retry_at) from None
+            from witness import deferral
+            when, _ = await deferral.defer_turn(pool, user, {"channel": inb.channel, "external_id": inb.external_id,
+                                                             "text": inb.text, "message_id": inb.message_id}, q.retry_at)
+            return {**await reply(deferral.saved_message(when)), "user_id": user, "status": "deferred", "retry_at": when}
     out = await reply(res["reply"], res.get("approval_id"))
     return {**out, "user_id": user, "task_id": res["task_id"], "status": res["status"]}

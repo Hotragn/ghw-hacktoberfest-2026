@@ -17,6 +17,7 @@ from witness import consent, firewall, i18n, memory, passkeys, payments
 from witness.agent import append_receipt
 from witness.db import user_tx
 from witness.llm import Provider, ToolCall
+from witness.router import CTX as LLM_CTX, QuotaExhausted
 from witness.tools import Ctx, Registry, Services, Tool
 
 MAX_STEPS = 8
@@ -172,6 +173,7 @@ class Agent:
         last_failure = None
         async with user_tx(self.pool, user) as conn:
             reg = await self._registry(conn, user)
+        ctx_token = LLM_CTX.set({"user": user, "high_risk": any(p.get("name") == "pay" for p in (pending or []))})
         try:
             queue: list[ToolCall] = [ToolCall(p["id"], p["name"], p["arguments"]) for p in (pending or [])]
             while True:
@@ -255,7 +257,12 @@ class Agent:
                 await self._save(conn, task, msgs, "done", reply)
                 await memory.log_event(conn, user, "assistant_msg", {"text": reply}, tid, channel=task["channel"], lang=lang)
             return self._result(task, "done", reply, trace)
+        except QuotaExhausted:
+            async with user_tx(self.pool, user) as conn:  # keep the transcript; the queued re-run starts a fresh task
+                await self._save(conn, task, msgs, "deferred", "waiting for model quota")
+            raise
         finally:
+            LLM_CTX.reset(ctx_token)
             await reg.close()
 
     @staticmethod
