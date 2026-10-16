@@ -64,6 +64,8 @@ The server's own headers always override these defaults.
 - Prefill of about 50 tok/s matches the research estimate (40–80 tok/s).
 - Generation on this contended box is well below the estimated 8–12 tok/s. That is because the box is memory-bandwidth starved. On a dedicated A1 with nothing else decoding, expect several times this figure. Re-measure on the VM with:
   ```bash
-  docker compose exec llm /app/llama-bench -m /models/Qwen3-1.7B-Q4_K_M.gguf -t 2 -p 300 -n 128
+  docker run --rm -v $PWD/models:/models --entrypoint /app/llama-bench ghcr.io/ggml-org/llama.cpp:full \
+    -m /models/Qwen3-1.7B-Q4_K_M.gguf -t 2 -p 300 -n 128
   ```
+  The `:full` image ships `llama-bench`; the `:server` image does not.
 - Either way, the local model is right only for routing labels, 1–2 sentence replies and "queued" notices. That is why it is light-tier-only and last in line.
