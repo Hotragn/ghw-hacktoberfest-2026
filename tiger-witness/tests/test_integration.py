@@ -34,7 +34,7 @@ async def test_scenario_outcomes(db):
     assert d["reply to buyer jo sure, pick up at my place tonight, here is my address"] == "blocked"
     assert d["book a table for four at lucia's for $110"] == "needs_approval"  # one-time mandate used up
     assert d["pay my water bill $60"] == "needs_approval"               # uncited assumption
-    g = [r["decision"] for r in await p.fetch("SELECT decision FROM actions WHERE user_id='u-grace' AND source LIKE 'inbound:%' ORDER BY ts")]
+    g = [r["decision"] for r in await p.fetch("SELECT decision FROM actions WHERE user_id='u-grace' AND source LIKE 'inbound:%' ORDER BY ts, split_part(source, ':', 2)::int")]
     assert g == ["blocked", "blocked", "executed_simulated"]
 
 
