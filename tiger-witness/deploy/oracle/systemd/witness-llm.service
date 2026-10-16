@@ -1,0 +1,16 @@
+[Unit]
+Description=llama.cpp server (Qwen3-1.7B Q4_K_M) for Witness light tier
+After=network-online.target
+
+[Service]
+User=witness
+ExecStart=/opt/llama.cpp/build/bin/llama-server -m /opt/witness/tiger-witness/deploy/oracle/models/Qwen3-1.7B-Q4_K_M.gguf --host 127.0.0.1 --port 8080 --jinja -c 8192 -t 2 --parallel 1 --cache-reuse 256 --alias qwen3-1.7b --reasoning-budget 0
+Restart=always
+RestartSec=5
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+MemoryMax=3G
+
+[Install]
+WantedBy=multi-user.target

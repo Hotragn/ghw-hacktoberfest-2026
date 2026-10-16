@@ -1,0 +1,7 @@
+name = "witness-ingress"
+main = "worker.js"
+compatibility_date = "2026-10-01"
+
+[vars]
+ORIGIN = "https://witness.example.com"   # your Caddy domain
+# secret (not in this file):  npx wrangler secret put TELEGRAM_WEBHOOK_SECRET

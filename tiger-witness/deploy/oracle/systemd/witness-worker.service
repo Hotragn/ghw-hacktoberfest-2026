@@ -1,0 +1,20 @@
+[Unit]
+Description=Witness worker
+After=network-online.target postgresql.service witness-llm.service
+Wants=network-online.target
+
+[Service]
+User=witness
+WorkingDirectory=/opt/witness/tiger-witness
+EnvironmentFile=/etc/witness.env
+ExecStart=/opt/witness/venv/bin/python -m witness.worker
+Restart=always
+RestartSec=3
+NoNewPrivileges=true
+ProtectSystem=strict
+ProtectHome=true
+PrivateTmp=true
+ReadWritePaths=/data/files
+
+[Install]
+WantedBy=multi-user.target

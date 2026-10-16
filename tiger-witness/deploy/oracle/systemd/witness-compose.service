@@ -1,0 +1,18 @@
+# Starts the compose stack on boot (and restarts it if docker restarts). Installed by cloud-init.
+[Unit]
+Description=Witness (docker compose)
+Requires=docker.service
+After=docker.service network-online.target
+Wants=network-online.target
+ConditionPathExists=/opt/witness/tiger-witness/deploy/oracle/.env
+
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+WorkingDirectory=/opt/witness/tiger-witness/deploy/oracle
+ExecStart=/usr/bin/docker compose --env-file .env up -d --build --remove-orphans
+ExecStop=/usr/bin/docker compose --env-file .env down
+TimeoutStartSec=1800
+
+[Install]
+WantedBy=multi-user.target

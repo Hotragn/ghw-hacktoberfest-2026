@@ -1,0 +1,71 @@
+# Witness on one Oracle Cloud Always Free Ampere A1 VM (2 OCPU / 12 GB, arm64).
+#   cd /opt/witness/tiger-witness/deploy/oracle && docker compose --env-file .env up -d --build
+# Memory budget (approx): llm 1.6 GB, db 1.5 GB, api 0.6 GB, worker 0.6 GB, caddy 50 MB  -> ~4.5 GB of 12.
+name: witness
+x-app: &app
+  build: { context: ../.., dockerfile: Dockerfile }   # python:3.12-slim is multi-arch; builds natively on arm64
+  env_file: .env
+  environment:
+    TIGER_DB_URL: postgres://postgres:${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}@db:5432/tsdb
+    WITNESS_LOCAL_LLM_URL: http://llm:8080/v1
+    WITNESS_LOCAL_LLM_MODEL: qwen3-1.7b
+    WITNESS_FILES_ROOT: /data/files
+  volumes: [witness_files:/data/files]
+  read_only: true
+  tmpfs: [/tmp]
+  security_opt: ["no-new-privileges:true"]
+  restart: unless-stopped
+  logging: { driver: json-file, options: { max-size: "10m", max-file: "5" } }
+
+services:
+  db:
+    image: timescale/timescaledb-ha:pg17          # multi-arch (arm64 available); bundles pgvector + pgvectorscale
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:?set POSTGRES_PASSWORD}
+      POSTGRES_DB: tsdb
+    command: ["postgres", "-c", "shared_buffers=512MB", "-c", "max_connections=60"]
+    healthcheck: { test: ["CMD-SHELL", "pg_isready -U postgres -d tsdb"], interval: 5s, retries: 30 }
+    volumes: [witness_db:/home/postgres/pgdata]
+    restart: unless-stopped
+    # no ports: Postgres is only reachable on the compose network
+
+  migrate:
+    <<: *app
+    command: ["python", "-m", "witness.setup_db"]
+    restart: "no"
+    depends_on: { db: { condition: service_healthy } }
+
+  api:
+    <<: *app
+    depends_on:
+      migrate: { condition: service_completed_successfully }
+      llm: { condition: service_started }
+    # bound to localhost only: Caddy is the single public entry point
+    ports: ["127.0.0.1:8103:8103"]
+
+  worker:
+    <<: *app
+    command: ["python", "-m", "witness.worker"]
+    depends_on: { migrate: { condition: service_completed_successfully } }
+
+  llm:
+    # llama.cpp server, Qwen3-1.7B Q4_K_M (~1.1 GB). Light tier only: routing, trivial replies, "queued" notices.
+    # --cache-reuse + byte-stable system prompt avoids re-prefilling the shared prefix on CPU.
+    image: ghcr.io/ggml-org/llama.cpp:server       # multi-arch; arm64 build uses NEON/dotprod kernels
+    command: ["-m", "/models/Qwen3-1.7B-Q4_K_M.gguf", "--host", "0.0.0.0", "--port", "8080", "--jinja",
+              "-c", "8192", "-t", "2", "--parallel", "1", "--cache-reuse", "256", "--alias", "qwen3-1.7b",
+              "--reasoning-budget", "0"]
+    volumes: [./models:/models:ro]
+    healthcheck: { test: ["CMD-SHELL", "curl -fs http://127.0.0.1:8080/health || exit 1"], interval: 15s, retries: 20 }
+    restart: unless-stopped
+    deploy: { resources: { limits: { memory: 3g } } }
+
+  caddy:
+    image: caddy:2                                 # automatic HTTPS (Let's Encrypt) for ${WITNESS_DOMAIN}
+    ports: ["80:80", "443:443", "443:443/udp"]
+    environment: { WITNESS_DOMAIN: "${WITNESS_DOMAIN:?set WITNESS_DOMAIN}", ACME_EMAIL: "${ACME_EMAIL:-}" }
+    volumes: [./Caddyfile:/etc/caddy/Caddyfile:ro, caddy_data:/data, caddy_config:/config]
+    network_mode: host                             # reaches api on 127.0.0.1:8103
+    restart: unless-stopped
+
+volumes: { witness_db: {}, witness_files: {}, caddy_data: {}, caddy_config: {} }

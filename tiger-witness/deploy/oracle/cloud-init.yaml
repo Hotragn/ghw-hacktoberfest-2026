@@ -1,0 +1,30 @@
+#cloud-config
+# Paste into "Show advanced options -> Management -> Cloud-init script" when creating the A1 instance
+# (image: Canonical Ubuntu 24.04 aarch64). Installs Docker, opens 80/443 in the OS firewall, clones Witness,
+# fetches the model. You still create deploy/oracle/.env and run `docker compose up` (see DEPLOY_ORACLE.md).
+package_update: true
+package_upgrade: true
+packages: [ca-certificates, curl, git, iptables-persistent, unattended-upgrades, fail2ban]
+write_files:
+  - path: /etc/sysctl.d/99-witness.conf
+    content: |
+      vm.swappiness=10
+      net.core.somaxconn=1024
+runcmd:
+  - [sh, -c, "curl -fsSL https://get.docker.com | sh"]
+  - [usermod, -aG, docker, ubuntu]
+  # Oracle Ubuntu images ship an iptables REJECT rule; insert ACCEPTs for HTTP/HTTPS above it and persist.
+  - [sh, -c, "iptables -I INPUT 6 -m state --state NEW -p tcp --dport 80 -j ACCEPT"]
+  - [sh, -c, "iptables -I INPUT 6 -m state --state NEW -p tcp --dport 443 -j ACCEPT"]
+  - [sh, -c, "iptables -I INPUT 6 -m state --state NEW -p udp --dport 443 -j ACCEPT"]
+  - [sh, -c, "netfilter-persistent save"]
+  # 4 GB swap as a cushion for builds (RAM is 12 GB)
+  - [sh, -c, "fallocate -l 4G /swapfile && chmod 600 /swapfile && mkswap /swapfile && swapon /swapfile && echo '/swapfile none swap sw 0 0' >> /etc/fstab"]
+  - [sysctl, --system]
+  - [git, clone, --depth, "1", "https://github.com/Hotragn/ghw-hacktoberfest-2026.git", /opt/witness]
+  - [chown, -R, "ubuntu:ubuntu", /opt/witness]
+  - [sudo, -u, ubuntu, /opt/witness/tiger-witness/deploy/oracle/fetch-model.sh]
+  - [cp, /opt/witness/tiger-witness/deploy/oracle/systemd/witness-compose.service, /etc/systemd/system/]
+  - [systemctl, daemon-reload]
+  - [systemctl, enable, witness-compose.service]
+final_message: "Witness base install done after $UPTIME s. Next: create /opt/witness/tiger-witness/deploy/oracle/.env"
