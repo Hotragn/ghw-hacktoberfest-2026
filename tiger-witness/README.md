@@ -204,3 +204,7 @@ Implement the Protocols in `witness/adapters.py` (`PaymentRail`, `SubscriptionMa
 15. Payments Dive, Agentic payment risk — https://www.paymentsdive.com/news/how-agentic-payments-artificial-intelligence-risk/832601/
 16. Prior art, signed mandates + receipts (TypeScript library, no memory/baseline/replay) — https://github.com/vanticlabs/vantic
 17. AP2 specification — https://ap2-protocol.org/ap2/specification/
+
+
+## Zero-friction model router + Oracle Always Free deploy
+No BYOK, no user setup: Witness pools one server-side account per free provider (Groq, Cloudflare Workers AI, OpenRouter free, opt-in Gemini for non-personal turns, local Qwen3-1.7B via llama.cpp) behind deterministic commands, caches, per-user budgets and a circuit breaker; when everything is out it queues the turn and replies "Saved, I'll reply by ~HH:MM". See [docs/ROUTER.md](docs/ROUTER.md) and [deploy/oracle/DEPLOY_ORACLE.md](deploy/oracle/DEPLOY_ORACLE.md).
