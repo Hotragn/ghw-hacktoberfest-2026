@@ -7,7 +7,7 @@ here=$(cd "$(dirname "$0")" && pwd)
 root=$(cd "$here/../.." && pwd)
 dst=${1:?usage: make-space.sh <space-repo-dir>}
 mkdir -p "$dst"
-cp "$here/Dockerfile" "$here/README.md" "$here/supervise.py" "$dst/"
+cp "$here/Dockerfile" "$here/README.md" "$here/supervise.py" "$here/requirements.lock" "$dst/"
 cp "$root/requirements.txt" "$root/tigerkit.py" "$root/tigerprod.py" "$dst/"
 for d in witness sql static; do
   rm -rf "${dst:?}/$d"

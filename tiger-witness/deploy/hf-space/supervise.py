@@ -53,6 +53,31 @@ def preflight_db(url: str | None, timeout: float = 5.0, connect=socket.create_co
     return True, f"database {host}:{port} reachable"
 
 
+def tls_warning(url: str | None) -> str | None:
+    if not url or "sslmode=verify-full" in url or os.environ.get("TIGER_DB_SSLMODE") == "verify-full":
+        return None
+    t = db_target(url)
+    if t and t[0] in ("localhost", "127.0.0.1"):
+        return None
+    return "TIGER_DB_URL should end with ?sslmode=verify-full (certificate + hostname verification); prod refuses less"
+
+
+def wait_ready(url: str, timeout: float = 180.0, opener=None, clock=time.monotonic, sleep=time.sleep) -> float | None:
+    """Poll url until HTTP 200; returns seconds taken or None on timeout. Used to log llama.cpp model load time."""
+    import urllib.request
+    opener = opener or (lambda u: urllib.request.urlopen(u, timeout=2))
+    t0 = clock()
+    while clock() - t0 < timeout:
+        try:
+            with opener(url) as r:
+                if getattr(r, "status", 200) == 200:
+                    return clock() - t0
+        except OSError:
+            pass
+        sleep(0.5)
+    return None
+
+
 def commands(env: dict) -> dict[str, list[str]]:
     port = env.get("PORT", "7860")
     py = env.get("PYTHON", sys.executable)
@@ -134,12 +159,17 @@ def main() -> int:
     env = dict(os.environ)
     ok, msg = preflight_db(env.get("TIGER_DB_URL"))
     log(("OK: " if ok else "ERROR: ") + msg)
+    if w := tls_warning(env.get("TIGER_DB_URL")):
+        log("WARN: " + w)
     sup = Supervisor(commands(env))
     signal.signal(signal.SIGTERM, lambda *a: (sup.stop(), sys.exit(0)))
     signal.signal(signal.SIGINT, lambda *a: (sup.stop(), sys.exit(0)))
     for name in ("llm", "api", "worker"):    # llm first so the router's local tier is warm sooner
         if name in sup.cmds:
             sup.start(name)
+    if "llm" in sup.cmds:
+        took = wait_ready("http://127.0.0.1:8080/health")
+        log(f"llm model loaded (mmap) in {took:.1f}s" if took is not None else "llm not ready after 180s")
     while True:
         sup.tick()
         time.sleep(1)

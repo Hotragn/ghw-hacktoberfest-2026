@@ -116,12 +116,60 @@ def test_dockerfile_invariants():
         if line.startswith("COPY "):
             assert "--chown=user" in line, line
     assert "TIGER_DB_URL" not in d and "TOKEN" not in d  # no secrets baked in
+    assert re.search(r"^FROM \S+@sha256:[0-9a-f]{64}$", d, re.M)          # base image pinned by digest
+    assert "sha256sum -c" in d and re.search(r"QWEN_GGUF_SHA256=[0-9a-f]{64}", d)
+    assert re.search(r"resolve/[0-9a-f]{40}/", d)                          # model pinned to a repo commit
+    assert "--require-hashes" in d and "requirements.lock" in d
+
+
+def test_lockfile_pins_everything_with_hashes():
+    lock = open(os.path.join(HF, "requirements.lock")).read()
+    pins = re.findall(r"^([A-Za-z0-9_.\-\[\]]+)==(\S+)", lock, re.M)
+    assert len(pins) > 20
+    blocks = re.split(r"\n(?=[A-Za-z0-9])", lock.split("\n", 1)[1] if lock.startswith("#") else lock)
+    for b in blocks:
+        if "==" in b.split("\n")[0]:
+            assert "--hash=sha256:" in b, b.split("\n")[0]
+    names = {n.lower().split("[")[0] for n, _ in pins}
+    for req in open(os.path.join(ROOT, "requirements.txt")):
+        name = re.split(r"[<>=\[ ]", req.strip())[0].lower()
+        if name:
+            assert name in names, name
+
+
+def test_tls_warning_and_wait_ready():
+    assert sup.tls_warning("postgres://u@svc.tsdb.cloud.timescale.com:3/tsdb?sslmode=require")
+    assert sup.tls_warning("postgres://u@svc.tsdb.cloud.timescale.com:3/tsdb?sslmode=verify-full") is None
+    assert sup.tls_warning("postgres://u@localhost/db") is None
+
+    class R:
+        status = 200
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *a):
+            return False
+    t = [0.0]
+    attempts = []
+
+    def opener(u):
+        attempts.append(u)
+        if len(attempts) < 3:
+            raise ConnectionRefusedError()
+        return R()
+
+    def sleep(s):
+        t[0] += s
+    assert sup.wait_ready("http://x/health", opener=opener, clock=lambda: t[0], sleep=sleep) == 1.0
+    assert sup.wait_ready("http://x/health", timeout=2, opener=lambda u: (_ for _ in ()).throw(OSError()),
+                          clock=lambda: t[0], sleep=sleep) is None
 
 
 def test_make_space_assembles(tmp_path):
     out = tmp_path / "space"
     subprocess.run(["bash", os.path.join(HF, "make-space.sh"), str(out)], check=True, capture_output=True)
-    for f in ("Dockerfile", "README.md", "supervise.py", "requirements.txt", "tigerkit.py", "tigerprod.py",
+    for f in ("Dockerfile", "README.md", "supervise.py", "requirements.txt", "requirements.lock", "tigerkit.py", "tigerprod.py",
               "witness/api.py", "witness/worker.py", "sql/01_schema.sql", ".dockerignore"):
         assert (out / f).exists(), f
     assert not list(out.rglob("__pycache__")) and not (out / ".env").exists()
