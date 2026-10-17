@@ -394,3 +394,68 @@ async def test_ui_and_agent_key_served(v2):
     r = await v2.get("/app")
     assert r.status_code == 200 and "Approvals inbox" in r.text
     assert "BEGIN PUBLIC KEY" in (await v2.get("/api/v2/agent-key")).json()["public_key_pem"]
+
+
+# ---------------------------------------------------------------- hf deploy: streaming, edge HMAC, headers (live app)
+def _events(text):
+    out = []
+    for block in text.strip().split("\n\n"):
+        lines = dict(ln.split(": ", 1) for ln in block.splitlines())
+        out.append((lines["event"], json.loads(lines["data"])))
+    return out
+
+
+async def test_chat_stream_falls_back_to_agent_final_event(v2):
+    h, _ = await new_user(v2, "streamer")
+    r = await v2.post("/api/v2/chat/stream", json={"message": "what's my balance"}, headers=h)
+    assert r.status_code == 200 and r.headers["content-type"].startswith("text/event-stream")
+    ev = _events(r.text)
+    assert len(ev) == 1 and ev[0][0] == "final" and "reply" in ev[0][1]
+    saved = dict(v2.cookies)
+    v2.cookies.clear()                       # the register call left a session cookie on the shared client
+    assert (await v2.post("/api/v2/chat/stream", json={"message": "hi"})).status_code == 401
+    v2.cookies.update(saved)
+
+
+async def test_chat_stream_light_turn_streams_from_router(v2):
+    from witness.router import BudgetPolicy, ProviderSpec, Route, Router
+    from witness.runtime import Agent
+    sse = "".join(f"data: {json.dumps({'choices': [{'delta': {'content': c}}]})}\n\n" for c in ("Ot", "ters")) + "data: [DONE]\n\n"
+    rt = Router([ProviderSpec("groq", "https://groq.test/v1", "k", [Route("groq", "m", frozenset({"light"}))])],
+                policy=BudgetPolicy(new_user_reserve=0),
+                transport=httpx.MockTransport(lambda req: httpx.Response(200, content=sse.encode())))
+    saved = api.state["agent"]
+    api.state["agent"] = Agent(api.state["pool"], rt, api.state["services"])
+    try:
+        h, _ = await new_user(v2, "streamer2")
+        r = await v2.post("/api/v2/chat/stream", json={"message": "name a cute river animal"}, headers=h)
+        assert _events(r.text) == [("delta", {"text": "Ot"}), ("delta", {"text": "ters"}), ("done", {})]
+    finally:
+        api.state["agent"] = saved
+
+
+async def test_webhook_requires_edge_hmac_when_configured(v2, monkeypatch):
+    import time as _t
+    from witness import edge
+    monkeypatch.setenv("TELEGRAM_WEBHOOK_SECRET", "tgs")
+    monkeypatch.setenv("WITNESS_EDGE_SECRET", "edge-shared")
+    body = json.dumps({"update_id": 990001, "message": {"chat": {"id": 555}, "text": "hello"}}).encode()
+    th = {"X-Telegram-Bot-Api-Secret-Token": "tgs", "content-type": "application/json"}
+    assert (await v2.post("/channels/telegram/webhook", content=body, headers=th)).status_code == 401
+    ts, nonce = str(int(_t.time())), uuid.uuid4().hex
+    sig = edge.sign("edge-shared", ts, nonce, "POST", "/channels/telegram/webhook", body)
+    eh = {**th, "x-witness-edge-ts": ts, "x-witness-edge-nonce": nonce, "x-witness-edge-sig": sig}
+    assert (await v2.post("/channels/telegram/webhook", content=body, headers=eh)).status_code == 200
+    assert (await v2.post("/channels/telegram/webhook", content=body, headers=eh)).status_code == 401   # replay
+    bad = {**eh, "X-Telegram-Bot-Api-Secret-Token": "nope", "x-witness-edge-nonce": uuid.uuid4().hex}
+    bad["x-witness-edge-sig"] = edge.sign("edge-shared", ts, bad["x-witness-edge-nonce"], "POST", "/channels/telegram/webhook", body)
+    assert (await v2.post("/channels/telegram/webhook", content=body, headers=bad)).status_code == 401  # provider check stays
+
+
+async def test_security_headers_and_health_alias(v2):
+    r = await v2.get("/health")
+    assert r.status_code == 200 and r.json() == {"ok": True}
+    r = await v2.get("/", headers={"origin": "https://evil.example"})
+    assert "default-src 'self'" in r.headers["content-security-policy"]
+    assert r.headers["cross-origin-opener-policy"] == "same-origin"
+    assert "access-control-allow-origin" not in r.headers

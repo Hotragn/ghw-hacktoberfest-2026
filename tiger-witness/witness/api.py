@@ -19,7 +19,7 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 from tigerkit import make_pool, text_embedding, vec_literal  # noqa: E402
 from tigerprod import (RateLimiter, hash_password, install_http_hardening, log_event, new_token,  # noqa: E402
                        setup_logging, token_hash, verify_password)
-from witness import agent  # noqa: E402
+from witness import agent, edge  # noqa: E402
 from witness.config import get_settings  # noqa: E402
 
 STATIC = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "static")
@@ -32,13 +32,15 @@ ACTIONS = ("pay_bill", "purchase", "book", "cancel_subscription", "disclose", "r
 
 @asynccontextmanager
 async def lifespan(_):
-    state["pool"] = await make_pool("witness", max_size=int(os.environ.get("WITNESS_DB_POOL", "10")))
+    state["pool"] = await make_pool("witness", min_size=int(os.environ.get("WITNESS_DB_POOL_MIN", "2")),
+                                    max_size=int(os.environ.get("WITNESS_DB_POOL", "10")))
     log_event(log, "startup", env=S.env, adapters=S.adapters)
     yield
     await state["pool"].close()
 
 app = FastAPI(title="Witness - the personal agent that can prove it", version="2.0.0", lifespan=lifespan)
-install_http_hardening(app, "witness", RateLimiter(S.rate_per_min, S.rate_burst))
+install_http_hardening(app, "witness", RateLimiter(S.rate_per_min, S.rate_burst), exempt=("/healthz", "/health", "/readyz"))
+edge.install(app)  # CSP/HSTS/COOP headers + strict CORS allow-list (witness/edge.py)
 login_limiter = RateLimiter(float(os.environ.get("WITNESS_LOGIN_RATE_PER_MIN", "10")),
                             int(os.environ.get("WITNESS_LOGIN_BURST", "5")))  # brute-force guard per IP on auth endpoints
 
@@ -185,6 +187,7 @@ async def logout(resp: Response, authorization: str | None = Header(default=None
 
 # ------------------------------------------------------------------ health
 @app.get("/healthz")
+@app.get("/health")
 async def healthz():
     return {"ok": True}
 

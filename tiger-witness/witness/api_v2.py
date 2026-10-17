@@ -8,11 +8,11 @@ import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Literal
 from fastapi import APIRouter, BackgroundTasks, Depends, Header, HTTPException, Query, Request
-from fastapi.responses import PlainTextResponse
+from fastapi.responses import PlainTextResponse, StreamingResponse
 from pydantic import BaseModel, Field
 
 from tigerprod import token_hash
-from witness import channels, consent, jobs, llm, memory, passkeys, payments
+from witness import channels, consent, edge, jobs, llm, memory, passkeys, payments
 from witness.db import user_tx
 from witness.runtime import Agent
 from witness.tools import Services
@@ -100,6 +100,10 @@ def _j(v):
     return v
 
 
+STREAM_SYSTEM = ("You are Witness, a concise personal assistant. Answer briefly. You cannot take actions in this "
+                 "reply; if asked to do something, say you will handle it as a task.")  # byte-stable: prompt-cache prefix
+
+
 def install(app, pool, current_user, state: dict):
     r = APIRouter(prefix="/api/v2")
 
@@ -128,6 +132,36 @@ def install(app, pool, current_user, state: dict):
             when, _ = await deferral.defer_turn(pool(), uid, {"channel": "web", "text": body.message}, q.retry_at)
             return {"task_id": None, "status": "deferred", "reply": deferral.saved_message(when), "retry_at": when,
                     "steps": [], "approval_id": None}
+
+    @r.post("/chat/stream")
+    async def chat_stream(body: ChatIn, uid: str = Depends(current_user)):
+        """Server-sent events. Light, first-turn, non-personal, tool-free messages stream token by token straight
+        from the router (Groq first). Everything else runs the normal agent (tools, taint/consent gating, passkeys
+        unchanged) and arrives as one `final` event with the same JSON as POST /chat."""
+        from witness import router as rt
+        a = agent()
+        prov = a.provider
+        msgs = [{"role": "system", "content": STREAM_SYSTEM}, {"role": "user", "content": body.message}]
+
+        def ev(name, data):
+            return f"event: {name}\ndata: {json.dumps(data)}\n\n"
+
+        async def gen():
+            tok = rt.CTX.set({"user": uid})   # set inside the generator: it runs in the response's own context
+            try:
+                if isinstance(prov, rt.Router) and prov.streamable(msgs[1:], {"user": uid}):
+                    try:
+                        async for d in prov.stream(msgs):
+                            yield ev("delta", {"text": d})
+                        yield ev("done", {})
+                        return
+                    except rt.QuotaExhausted:
+                        pass   # fall through to the agent, which defers durably
+                yield ev("final", await chat(body, uid))
+            finally:
+                rt.CTX.reset(tok)
+        return StreamingResponse(gen(), media_type="text/event-stream",
+                                 headers={"cache-control": "no-store", "x-accel-buffering": "no"})
 
     @r.get("/tasks")
     async def tasks(limit: int = Query(30, ge=1, le=200), uid: str = Depends(current_user)):
@@ -416,10 +450,12 @@ def install(app, pool, current_user, state: dict):
         """Durable hand-off: persist to the job queue and ACK immediately; witness.worker processes it."""
         async with pool().acquire() as c:
             for inb in inbs:
+                if not edge.sender_allowed(inb.channel, inb.external_id):  # per chat id/phone, not per (edge) IP
+                    continue                                           # 200 anyway: a 429 only makes providers retry
                 payload, key = inb.job()
                 await jobs.enqueue(c, "channel", payload, key)
 
-    @app.post("/channels/telegram/webhook")
+    @app.post("/channels/telegram/webhook", dependencies=[Depends(edge.edge_guard)])
     async def tg_hook(req: Request, background: BackgroundTasks,
                       x_telegram_bot_api_secret_token: str | None = Header(default=None)):
         if not channels.telegram_verify(x_telegram_bot_api_secret_token):
@@ -428,7 +464,7 @@ def install(app, pool, current_user, state: dict):
         await _route([inb] if inb else [], background, "telegram")
         return {"ok": True}
 
-    @app.get("/channels/whatsapp/webhook")
+    @app.get("/channels/whatsapp/webhook", dependencies=[Depends(edge.edge_guard)])
     async def wa_verify(mode: str | None = Query(None, alias="hub.mode"), token: str | None = Query(None, alias="hub.verify_token"),
                         challenge: str | None = Query(None, alias="hub.challenge")):
         ch = channels.whatsapp_verify_challenge(mode, token, challenge)
@@ -436,7 +472,7 @@ def install(app, pool, current_user, state: dict):
             raise HTTPException(403, "verification failed")
         return PlainTextResponse(ch)
 
-    @app.post("/channels/whatsapp/webhook")
+    @app.post("/channels/whatsapp/webhook", dependencies=[Depends(edge.edge_guard)])
     async def wa_hook(req: Request, background: BackgroundTasks, x_hub_signature_256: str | None = Header(default=None)):
         raw = await req.body()
         if not channels.whatsapp_verify_signature(raw, x_hub_signature_256):
@@ -444,7 +480,7 @@ def install(app, pool, current_user, state: dict):
         await _route(channels.whatsapp_parse(json.loads(raw)), background, "whatsapp")
         return {"ok": True}
 
-    @app.post("/channels/imessage/webhook")
+    @app.post("/channels/imessage/webhook", dependencies=[Depends(edge.edge_guard)])
     async def im_hook(req: Request, background: BackgroundTasks, token: str | None = Query(None)):
         if not channels.imessage_verify(token):
             raise HTTPException(401, "bad token")
