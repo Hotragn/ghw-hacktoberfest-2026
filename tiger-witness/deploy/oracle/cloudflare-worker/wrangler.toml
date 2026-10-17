@@ -4,7 +4,7 @@ compatibility_date = "2026-10-01"
 
 [vars]
 ORIGIN = "https://YOUR_HF_USERNAME-witness.hf.space"   # Hugging Face Space URL (or your Caddy domain)
-# secret (not in this file):  npx wrangler secret put TELEGRAM_WEBHOOK_SECRET
+# secrets (never in this file): npx wrangler secret put TELEGRAM_WEBHOOK_SECRET | WHATSAPP_APP_SECRET | IMESSAGE_WEBHOOK_SECRET | WITNESS_EDGE_SECRET
 
 # Ack-fast queue (Workers Free includes Queues: 10K ops/day, 24h retention). Create once:
 #   npx wrangler queues create witness-webhooks
@@ -18,6 +18,6 @@ max_batch_size = 5
 max_batch_timeout = 1
 max_retries = 20          # ~1.5 h of backoff (15s..300s) covers a cold Space rebuild
 
-# Keep-alive: ping ORIGIN/healthz every 6 h (free tier Spaces sleep after 48 h without traffic).
+# Keep-alive + warm: GET ORIGIN/health every 10 min (free tier Spaces sleep after 48 h without traffic).
 [triggers]
-crons = ["0 */6 * * *"]
+crons = ["*/10 * * * *"]
