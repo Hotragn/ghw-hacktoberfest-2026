@@ -19,6 +19,18 @@ class Settings:
     adapters: str  # "sim" today; "live" requires real provider modules
 
 
+def db_tls_problem(url: str) -> bool:
+    """True when a remote DB URL would connect without full certificate + hostname verification."""
+    from urllib.parse import parse_qs, urlsplit
+    if not url:
+        return False
+    u = urlsplit(url)
+    if u.hostname in (None, "localhost", "127.0.0.1", "::1", "db"):
+        return False
+    mode = os.environ.get("TIGER_DB_SSLMODE") or (parse_qs(u.query).get("sslmode") or [""])[0]
+    return mode != "verify-full"
+
+
 def get_settings() -> Settings:
     load_env()
     s = Settings(env=os.environ.get("WITNESS_ENV", "dev"),
@@ -34,4 +46,6 @@ def get_settings() -> Settings:
             raise SystemExit("WITNESS_SIGNING_KEY must be >= 32 random chars in prod")
         if not s.cookie_secure:
             raise SystemExit("WITNESS_COOKIE_SECURE must be true in prod")
+        if db_tls_problem(os.environ.get("TIGER_DB_URL", "")):
+            raise SystemExit("TIGER_DB_URL must use sslmode=verify-full in prod (or set TIGER_DB_SSLMODE=verify-full)")
     return s

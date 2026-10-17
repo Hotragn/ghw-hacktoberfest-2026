@@ -37,11 +37,33 @@ def db_url() -> str:
     return url
 
 
+def tls_args(url: str) -> tuple[str, dict]:
+    """Strict TLS for remote Postgres. `sslmode=verify-full` (in the URL or via TIGER_DB_SSLMODE) becomes an explicit
+    SSLContext: CERT_REQUIRED + hostname check against the system CA bundle (Tiger Cloud uses a public CA) or
+    PGSSLROOTCERT / sslrootcert= when given. Other modes are passed through untouched to asyncpg."""
+    from urllib.parse import parse_qsl, urlencode, urlsplit, urlunsplit
+    u = urlsplit(url)
+    q = dict(parse_qsl(u.query))
+    mode = os.environ.get("TIGER_DB_SSLMODE") or q.get("sslmode")
+    if mode != "verify-full":
+        return url, {}
+    import ssl
+    ctx = ssl.create_default_context(cafile=q.pop("sslrootcert", None) or os.environ.get("PGSSLROOTCERT") or None)
+    ctx.minimum_version = ssl.TLSVersion.TLSv1_2
+    ctx.check_hostname, ctx.verify_mode = True, ssl.CERT_REQUIRED
+    q.pop("sslmode", None)
+    return urlunsplit(u._replace(query=urlencode(q))), {"ssl": ctx}
+
+
 async def make_pool(schema: str, min_size: int = 1, max_size: int = 5) -> asyncpg.Pool:
-    # search_path as a startup parameter survives asyncpg's RESET ALL on connection release
-    return await asyncpg.create_pool(db_url(), min_size=min_size, max_size=max_size, command_timeout=60,
+    # search_path as a startup parameter survives asyncpg's RESET ALL on connection release.
+    # Pooled, long-lived TLS connections: the handshake (~3 RTT to us-east-1) is paid once per connection, not per
+    # query; min_size keeps warm connections ready, idle ones are recycled after 5 min.
+    url, extra = tls_args(db_url())
+    return await asyncpg.create_pool(url, min_size=min_size, max_size=max(min_size, max_size), command_timeout=60,
+                                     max_inactive_connection_lifetime=300.0,
                                      server_settings={"search_path": f"{schema}, public",
-                                                      "application_name": f"tiger-{schema}"})
+                                                      "application_name": f"tiger-{schema}"}, **extra)
 
 
 async def apply_sql_files(pool: asyncpg.Pool, files: Sequence[str]) -> None:
