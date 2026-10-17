@@ -561,6 +561,110 @@ class Router:
         retry = min(self.states[r.key].available_at(self.clock(), est) for _, r in cands)
         raise QuotaExhausted(max(retry, self.clock() + 5), f"providers_{tier}")
 
+    # ---- streaming (light, first-turn, non-personal, tool-free turns only)
+    def streamable(self, messages: list[dict], ctx: dict | None = None) -> bool:
+        ctx = ctx or {}
+        return (bool(messages) and messages[-1].get("role") == "user"
+                and not any(m.get("role") in ("assistant", "tool") for m in messages)
+                and not (ctx.get("personal") or is_personal(messages))
+                and tier_for(messages, [], ctx) == "light")
+
+    async def _stream_call(self, p: ProviderSpec, r: Route, messages):
+        body = {"model": r.model, "messages": messages, "temperature": 0.2, "stream": True,
+                "stream_options": {"include_usage": True}}
+        headers = {"Authorization": f"Bearer {p.api_key}", **p.extra_headers}
+        async with self.clients[p.name].stream("POST", f"{p.base_url.rstrip('/')}/chat/completions",
+                                               json=body, headers=headers) as resp:
+            if resp.status_code >= 400:
+                await resp.aread()
+                yield resp, None, 0
+                return
+            async for line in resp.aiter_lines():
+                if not line.startswith("data:"):
+                    continue
+                data = line[5:].strip()
+                if data == "[DONE]":
+                    break
+                try:
+                    j = json.loads(data)
+                except json.JSONDecodeError:
+                    continue
+                used = int((j.get("usage") or {}).get("total_tokens") or 0)
+                delta = ((j.get("choices") or [{}])[0].get("delta") or {}).get("content") if j.get("choices") else None
+                yield resp, delta, used
+
+    async def stream(self, messages: list[dict], lang: str = "en"):
+        """Yield text deltas for a light turn. Falls over to the next route only before the first token, so the
+        user never sees two half-answers. Deterministic and cache hits are yielded whole (zero model latency).
+        Qwen3 <think> traces are suppressed. Raises QuotaExhausted like complete()."""
+        ctx = CTX.get() or {}
+        now = self.clock()
+        user_text = messages[-1].get("content") or ""
+        d = deterministic(user_text)
+        if d:
+            self.stats["deterministic"] += 1
+            yield d
+            return
+        k = ExactCache.key(user_text, lang)
+        hit = self.exact.get(k, now)
+        if hit is not None:
+            self.stats["exact_hit"] += 1
+            yield hit
+            return
+        user = ctx.get("user")
+        await self._check_budget(user, now)
+        est = _est_tokens(messages, [])
+        cands = self.candidates("light", False)
+        for p, r in cands:
+            st = self.states[r.key]
+            if st.available_at(now, est) > now:
+                continue
+            parts, used, started, in_think = [], 0, False, False
+            try:
+                async for resp, delta, u in self._stream_call(p, r, messages):
+                    used = u or used
+                    if delta is None and not started and resp.status_code >= 400:
+                        st.observe_headers(resp.headers, self.clock(), resp.status_code)
+                        if resp.status_code != 429:
+                            st.fail(self.clock())
+                        break
+                    if not delta:
+                        continue
+                    if "<think>" in delta:
+                        in_think = True
+                    if in_think:
+                        if "</think>" in delta:
+                            in_think, delta = False, delta.split("</think>", 1)[1].lstrip()
+                        else:
+                            continue
+                    if delta:
+                        started = True
+                        parts.append(delta)
+                        yield delta
+            except (httpx.HTTPError, ValueError) as e:
+                st.fail(self.clock())
+                log.warning("stream %s failed: %s", r.key, type(e).__name__)
+                if started:
+                    return
+                continue
+            if not started:
+                continue
+            now = self.clock()
+            st.ok()
+            used = used or est
+            st.record(now, used)
+            self.stats["calls"] += 1
+            day = _day(now)
+            await self.budgets.add("pool", day, 1, used)
+            await self.budgets.add(f"prov:{r.key}", day, 1, used)
+            if user:
+                await self.budgets.add(f"user:{user}", day, 1, used)
+            self.exact.put(k, "".join(parts), now)
+            log.info("streamed tier=light via %s tokens=%s", r.key, used)
+            return
+        self.stats["exhausted"] += 1
+        raise QuotaExhausted(self.clock() + 60, "providers_light_stream")
+
     def health(self) -> dict:
         now = self.clock()
         return {k: {"available_in_s": max(0, round(s.available_at(now) - now)), "day_requests": s.day_req,
