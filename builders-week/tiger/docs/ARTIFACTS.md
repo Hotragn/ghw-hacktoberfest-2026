@@ -1,13 +1,23 @@
-# Portable archive
+# Portable archive (local VM — review fixes)
 
-A tarball of this directory is saved for box transfer:
+**Not pushed to GitHub** until user approves.
 
-- `/opt/cursor/artifacts/builders-week-tiger-2026-11-08.tar.gz`
+| Artifact | Path |
+|----------|------|
+| Corrected tarball | `/opt/cursor/artifacts/builders-week-tiger-review-fixes-2026-11-08.tar.gz` |
+| Prior tarball (pre-review-fix) | `/opt/cursor/artifacts/builders-week-tiger-2026-11-08.tar.gz` |
 
-Recreate locally:
+Recreate tarball after edits:
 
 ```bash
-tar -xzf builders-week-tiger-2026-11-08.tar.gz
+tar -czf /opt/cursor/artifacts/builders-week-tiger-review-fixes-2026-11-08.tar.gz \
+  -C /workspace builders-week/tiger
 ```
 
-No secrets are included. Copy `.env.example` to `.env` only on your machine if needed.
+Extract elsewhere:
+
+```bash
+tar -xzf builders-week-tiger-review-fixes-2026-11-08.tar.gz
+```
+
+Excludes: `.env`, `__pycache__`, `*.pyc` (via `.gitignore`; tarball from clean tree recommended).

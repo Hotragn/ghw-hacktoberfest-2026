@@ -21,6 +21,7 @@ class TestEmbeddings(unittest.TestCase):
             device_id="sensor-a1",
         )
         self.assertEqual(len(v), DIM)
+        self.assertGreaterEqual(DIM, 256)
         norm = math.sqrt(sum(x * x for x in v))
         self.assertAlmostEqual(norm, 1.0, places=4)
 
@@ -36,6 +37,7 @@ class TestEmbeddings(unittest.TestCase):
             v = embed_text(summary, site=site, category=cat, severity=int(sev), device_id=dev)
             lit = vec_literal(v)
             self.assertTrue(lit.startswith("[") and lit.endswith("]"))
+            self.assertEqual(len(v), 256)
 
 
 if __name__ == "__main__":

@@ -25,8 +25,14 @@ SQL_FILES=(
   sql/02_import_device_events.sql
   sql/03_convert_hypertable.sql
   sql/04_hybrid_vector.sql
+  sql/04b_import_alert_embeddings.sql
   sql/05_indexes.sql
 )
+
+if [[ ! -f "$ROOT/sql/04b_import_alert_embeddings.sql" ]]; then
+  echo "ERROR: missing sql/04b_import_alert_embeddings.sql — run: python3 scripts/gen_deterministic_embeddings.py" >&2
+  exit 1
+fi
 
 for rel in "${SQL_FILES[@]}"; do
   f="$ROOT/$rel"

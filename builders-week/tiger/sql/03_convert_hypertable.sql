@@ -1,4 +1,4 @@
--- Challenge 1: convert plain table → hypertable (explicit step per MLH wording).
+-- Challenge 1: convert plain table → hypertable after import (nonempty table requires migrate_data).
 SET search_path TO builders_week, public;
 
 DO $$
@@ -14,7 +14,8 @@ BEGIN
     PERFORM create_hypertable(
       'builders_week.device_events',
       by_range('recorded_at', INTERVAL '1 day'),
-      if_not_exists => TRUE
+      if_not_exists => TRUE,
+      migrate_data => TRUE
     );
   END IF;
 END $$;

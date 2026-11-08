@@ -8,8 +8,11 @@ CREATE TABLE IF NOT EXISTS device_events (
   event_type    TEXT NOT NULL,
   severity      SMALLINT NOT NULL CHECK (severity BETWEEN 1 AND 5),
   value_celsius DOUBLE PRECISION,
-  message       TEXT NOT NULL
+  message       TEXT NOT NULL,
+  fixture_batch TEXT NOT NULL DEFAULT 'bw2026-demo-v1'
 );
 
 COMMENT ON TABLE device_events IS
   'Builders Week sample IoT-style events. Convert to hypertable in 03_convert_hypertable.sql after load.';
+COMMENT ON COLUMN device_events.fixture_batch IS
+  'Import scripts delete/upsert only rows with fixture_batch = bw2026-demo-v1';

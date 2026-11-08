@@ -1,41 +1,21 @@
-# MLH submission drafts (Tiger challenges) — **not submitted**
+# MLH submission drafts (Tiger challenges) — **do not submit until live proof exists**
 
-Public Tiger challenge pages do not specify a prose format. Use these as starting points after you complete **live** steps. Redact passwords and hostnames in screenshots.
+Use only after **you** complete live steps. These are conditional templates, not completion claims.
 
-## Challenge 1 — Launch Your First Tiger Data Hypertable
+## Challenge 1 — Hypertable
 
-**Suggested evidence**
+**After live run, you might write:**
 
-- Screenshot: Tiger Console or `tiger service list` showing your service (redacted).
-- Screenshot or paste: output of `queries/verify_hypertable_chunks.sql` showing `device_events` and chunks.
-- Short note: imported `data/device_events_sample.csv`, converted with `sql/03_convert_hypertable.sql`.
+> I used a Tiger Cloud service, loaded fixture batch `bw2026-demo-v1` into `builders_week.device_events`, and converted the nonempty plain table with `create_hypertable(..., migrate_data => TRUE)`. Chunk metadata confirmed time partitioning.
 
-**Draft description (edit after live run)**
+## Challenge 3 — Tiger CLI
 
-> I created a free Tiger Cloud TimescaleDB service, loaded the Builders Week `device_events` sample into schema `builders_week`, and converted the plain table to a hypertable partitioned on `recorded_at`. Chunk metadata confirms time-based partitioning is active.
-
-## Challenge 3 — Tiger CLI or MCP
-
-**Path chosen:** Tiger CLI (not MCP).
-
-**Suggested evidence**
-
-- Terminal log: `tiger auth login` success (no token pasted).
-- `tiger db ping <service>` success.
-- `tiger db query <service> -f queries/verify_extensions.sql` table output.
-
-**Draft description**
-
-> I authenticated with Tiger CLI and used `tiger db query` to apply the Builders Week SQL bundle and run read-only verification queries against my Tiger Cloud service, giving my agent workflow a documented, repeatable path to inspect hypertables and extensions without hand-copying connection strings.
+> I used Tiger CLI (`tiger db query -f ...`) to apply the SQL bundle and read-only verification queries against my service.
 
 ## Challenge 5 — pgvector
 
-**Suggested evidence**
+> I stored **256-dimensional** vectors in `builders_week.alert_embeddings` and ran similarity SQL with time, metadata, and cosine/L2 filters.
 
-- `queries/verify_extensions.sql` showing `vector` and (on Tiger Cloud) `vectorscale`.
-- Output of `similarity_filtered_time.sql` and `similarity_filtered_metadata.sql` showing ranked rows with distance column.
-- One line noting embeddings are deterministic demo vectors unless you swapped in a real model.
+**If still using bundled hashes, add honestly:**
 
-**Draft description**
-
-> I stored 16-dimensional vectors alongside time-series alert rows in hypertable `builders_week.alert_embeddings`, enabled pgvector (and pgvectorscale DiskANN when available), and ran similarity searches filtered by time range, site metadata, and severity using both cosine (`<=>`) and L2 (`<->`) metrics in pure SQL.
+> Embeddings are deterministic lexical hashes for SQL/index exercises, not semantic model outputs. pgvectorscale was confirmed via `verify_extensions.sql` and `verify_vector_index.sql` (or note HNSW-only fallback).
