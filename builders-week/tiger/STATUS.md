@@ -2,11 +2,12 @@
 
 ## Local preparation (this VM)
 
+- [x] Round-2 review: no DROP/DELETE in fixture path; typmod without -4; nullable fixture_batch; ON CONFLICT upserts
 - [x] Review P1/P2 SQL fixes applied under `builders-week/tiger/` only
 - [x] 256-d non-semantic lexical embedding pipeline + `validate_embedding_csv.py`
 - [x] 14 mock unittest tests + `verify_local.sh` (CSV/generator sync)
 - [x] `__pycache__` removed; `.gitignore` added
-- [ ] **Not pushed** — awaiting direct user approval (prior push was relayed only)
+- [ ] **No further pushes** until direct user approval (earlier push may exist on origin; new commits local-only)
 - [ ] **No live Tiger Cloud execution** in this environment
 
 ## NOT claimed complete
@@ -21,7 +22,7 @@ Deterministic 256-d hashes exercise pgvector operators only.
 ## Mock test results (this VM)
 
 ```
-python3 -m unittest discover -s tests -p 'test_*.py' -v  → 14 tests OK
+python3 -m unittest discover -s tests -p 'test_*.py' -v  → 22 tests OK (static/mock only)
 ./scripts/verify_local.sh                                 → OK
 ```
 

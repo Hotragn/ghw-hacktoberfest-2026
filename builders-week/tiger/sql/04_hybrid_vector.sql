@@ -1,13 +1,13 @@
 -- Challenge 5: vectors alongside time-series data (hypertable). vector(256) NON-SEMANTIC demo.
 SET search_path TO builders_week, public;
 
--- If a prior 16-d demo table exists in this schema, drop only that fixture table (builders_week scope).
+-- Fail closed on incompatible existing schema — operator must migrate manually.
 DO $$
 DECLARE
   dim integer;
 BEGIN
   IF to_regclass('builders_week.alert_embeddings') IS NOT NULL THEN
-    SELECT (a.atttypmod - 4) INTO dim
+    SELECT a.atttypmod INTO dim
     FROM pg_attribute a
     JOIN pg_class c ON c.oid = a.attrelid
     JOIN pg_namespace n ON n.oid = c.relnamespace
@@ -15,9 +15,11 @@ BEGIN
       AND c.relname = 'alert_embeddings'
       AND a.attname = 'embedding'
       AND NOT a.attisdropped;
+    -- pgvector: atttypmod is the dimension (see pgvector vector_typmod_in).
     IF dim IS NOT NULL AND dim <> 256 THEN
-      RAISE NOTICE 'Dropping builders_week.alert_embeddings (embedding dimension %, expected 256)', dim;
-      DROP TABLE builders_week.alert_embeddings CASCADE;
+      RAISE EXCEPTION
+        'builders_week.alert_embeddings.embedding must be vector(256) (atttypmod=%), found %. Manual operator migration required.',
+        256, dim;
     END IF;
   END IF;
 END $$;
@@ -31,8 +33,8 @@ CREATE TABLE IF NOT EXISTS alert_embeddings (
   severity      SMALLINT NOT NULL CHECK (severity BETWEEN 1 AND 5),
   summary_text  TEXT NOT NULL,
   tags          TEXT[] NOT NULL DEFAULT '{}',
-  fixture_batch TEXT NOT NULL DEFAULT 'bw2026-demo-v1',
-  -- Deterministic 256-d lexical feature hash — NOT semantic LLM embeddings (see README).
+  -- NULL = non-fixture application row; demo imports set bw2026-demo-v1 explicitly (no DEFAULT).
+  fixture_batch TEXT NULL,
   embedding     vector(256) NOT NULL
 );
 
@@ -54,7 +56,6 @@ BEGIN
   END IF;
 END $$;
 
--- Hypertable unique indexes must include the partition time column.
 CREATE UNIQUE INDEX IF NOT EXISTS alert_embeddings_recorded_fixture_uidx
   ON alert_embeddings (recorded_at, fixture_key);
 
@@ -62,4 +63,4 @@ CREATE INDEX IF NOT EXISTS alert_embeddings_site_sev_ts
   ON alert_embeddings (site, severity, recorded_at DESC);
 
 COMMENT ON COLUMN alert_embeddings.embedding IS
-  '256-d lexical hash demo only; replace with vetted external model embeddings + validate_embedding_csv.py if required.';
+  '256-d lexical hash demo (NON-SEMANTIC). External CSV: validate_embedding_csv.py';

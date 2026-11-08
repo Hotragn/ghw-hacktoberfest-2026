@@ -4,7 +4,8 @@
 
 | Artifact | Path |
 |----------|------|
-| Corrected tarball | `/opt/cursor/artifacts/builders-week-tiger-review-fixes-2026-11-08.tar.gz` |
+| Latest corrected tarball | `/opt/cursor/artifacts/builders-week-tiger-review-fixes-r2-2026-11-08.tar.gz` |
+| Prior tarball (r1) | `/opt/cursor/artifacts/builders-week-tiger-review-fixes-2026-11-08.tar.gz` |
 | Prior tarball (pre-review-fix) | `/opt/cursor/artifacts/builders-week-tiger-2026-11-08.tar.gz` |
 
 Recreate tarball after edits:
