@@ -1,9 +1,18 @@
-# Cursor Challenge 2 — model comparison (prep only)
+# Cursor Challenge 2 — same prompt, multiple models
 
-No models are run from this cloud agent. The **owner** runs the frozen prompt in **Cursor Desktop** on up to three models and fills in results.
+**Requirement:** Compare how up to **three** Cursor models answer one frozen prompt.
 
-1. Read [`PROMPT.md`](PROMPT.md) — exact string: *write a function that reverses a string*
-2. For each model, capture response + rough time
-3. Copy [`results-template.md`](results-template.md) to something like `results.md` and complete the table
+| File | Role |
+|------|------|
+| [`PROMPT.md`](PROMPT.md) | Exact text to paste in Cursor Desktop |
+| [`results-template.md`](results-template.md) | Empty table — **fill only with your real runs** |
 
-Nothing here requires push, live DB, or API credentials.
+This cloud agent does **not** run models or invent timings/scores. Do not commit API keys.
+
+## Steps (owner, Cursor Desktop)
+
+1. Open `PROMPT.md` and use the prompt verbatim for each model.
+2. Save code/output and note approximate time yourself.
+3. Copy `results-template.md` → `results.md` and complete the table honestly.
+
+No database or push required for Challenge 2 prep.

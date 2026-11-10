@@ -13,7 +13,7 @@ import sys
 from pathlib import Path
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
-from gen_deterministic_embeddings import DIM, FIXTURE_BATCH  # noqa: E402
+from fixtures import DIM, FIXTURE_BATCH  # noqa: E402
 
 REQUIRED = {
     "recorded_at",

@@ -44,9 +44,10 @@ class TestSqlInvariants(unittest.TestCase):
         text = (SQL / "04_hybrid_vector.sql").read_text(encoding="utf-8")
         self.assertRegex(text, r"ON alert_embeddings \(recorded_at,\s*fixture_key\)")
 
-    def test_vector_dimension_256(self):
+    def test_vector_dimension_384(self):
         text = (SQL / "04_hybrid_vector.sql").read_text(encoding="utf-8")
-        self.assertIn("vector(256)", text)
+        self.assertIn("vector(384)", text)
+        self.assertNotIn("vector(256)", text)
 
     def test_join_orders_by_vector_distance(self):
         text = (QUERIES / "join_timeseries_vector.sql").read_text(encoding="utf-8")

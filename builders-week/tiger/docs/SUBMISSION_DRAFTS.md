@@ -1,21 +1,9 @@
-# MLH submission drafts (Tiger challenges) — **do not submit until live proof exists**
+# MLH drafts — use only after live proof
 
-Use only after **you** complete live steps. These are conditional templates, not completion claims.
+## Tiger 5 (semantic)
 
-## Challenge 1 — Hypertable
+After you run `embed_semantic.py`, apply SQL, and capture query output:
 
-**After live run, you might write:**
+> I stored **384-dimensional semantic embeddings** (all-MiniLM-L6-v2) in `builders_week.alert_embeddings` and ran pgvector similarity with time, metadata, and L2/cosine filters. Index type: DiskANN if `vectorscale` is installed, else HNSW (see `verify_vector_index.sql`).
 
-> I used a Tiger Cloud service, loaded fixture batch `bw2026-demo-v1` into `builders_week.device_events`, and converted the nonempty plain table with `create_hypertable(..., migrate_data => TRUE)`. Chunk metadata confirmed time partitioning.
-
-## Challenge 3 — Tiger CLI
-
-> I used Tiger CLI (`tiger db query -f ...`) to apply the SQL bundle and read-only verification queries against my service.
-
-## Challenge 5 — pgvector
-
-> I stored **256-dimensional** vectors in `builders_week.alert_embeddings` and ran similarity SQL with time, metadata, and cosine/L2 filters.
-
-**If still using bundled hashes, add honestly:**
-
-> Embeddings are deterministic lexical hashes for SQL/index exercises, not semantic model outputs. pgvectorscale was confirmed via `verify_extensions.sql` and `verify_vector_index.sql` (or note HNSW-only fallback).
+Do not claim completion from CSV/unit tests alone.

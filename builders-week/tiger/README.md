@@ -1,47 +1,56 @@
-# MLH GHW Builders Week — Tiger Data sample (Challenges 1, 3, 5)
+# MLH Builders Week — Tiger Data (`builders_week` schema)
 
-**Event:** Global Hack Week: Builders Week, Nov 6–12, 2026  
-**Status:** Preparation only — **not live-verified**. Do not push or run `run_live.sh` until direct user approval.
+**Event:** GHW Builders Week · **Repo path:** `builders-week/tiger/`  
+**Status:** Prep + local semantic embed tests — **live Tiger Cloud not claimed** unless you run the runbook.
 
-## Scope
+## Challenge map (MLH)
 
-Idempotent SQL under schema `builders_week`, capped sample data, Tiger CLI runbook, **mock** static/unittest checks. No Tiger Cloud provisioning from this agent without user approval.
+| MLH # | Requirement | This folder |
+|-------|-------------|-------------|
+| **1** Hypertable | Import sample time-series, convert plain table → hypertable | `sql/02_*`, `03_convert_hypertable.sql` (`migrate_data => TRUE`) |
+| **3** Tiger CLI | Documented CLI to apply SQL / queries | `cli/RUNBOOK.md`, `scripts/run_live.sh` |
+| **5** pgvector | Semantic vectors + time/metadata/distance filters; pgvectorscale DiskANN or HNSW | `sql/04_*`, `05_indexes.sql`, `queries/similarity_*.sql` |
 
-## Review fixes (local, 2026-11-08)
+## Challenge 5 embeddings (semantic)
 
-- Nonempty hypertable conversion: `migrate_data => TRUE` on `device_events`
-- Hypertable-safe uniqueness: `(recorded_at, fixture_key)`
-- Fixture reload deletes only `fixture_batch = 'bw2026-demo-v1'` rows
-- Join query orders lateral matches by **vector distance**
-- `vectorscale`: no silent `WHEN OTHERS`; explicit WARNING if missing
-- CLI runbook: free service requires `--region us-east-1 --cpu shared --memory shared` (or use existing service)
-- **256-d** non-semantic lexical hashes (`data/README-embeddings.md`) — not AI semantic embeddings
+| Item | Detail |
+|------|--------|
+| Model | `sentence-transformers/all-MiniLM-L6-v2` (384-d) |
+| Script | `python3 scripts/embed_semantic.py` (after `pip install -r requirements-embed.txt`) |
+| Storage | `vector(384)` in hypertable `alert_embeddings` |
 
-## Embeddings
+No paid embedding API. First run may download the model from Hugging Face.
 
-Default vectors are **256-dimensional lexical feature hashes** (no model API). Optional external CSV: `scripts/validate_embedding_csv.py`.
-
-## Local mock tests
+## Quick start (local mock)
 
 ```bash
 cd builders-week/tiger
-python3 scripts/gen_deterministic_embeddings.py   # if you change ROWS
+pip install -r requirements-embed.txt   # optional for semantic tests + regen
+python3 scripts/embed_semantic.py      # regenerate 04b + queries
 python3 -m unittest discover -s tests -p 'test_*.py' -v
 ./scripts/verify_local.sh
 ```
 
-## Live Tiger Cloud (user approval required)
+Static/SQL unit tests **do not** prove live hypertable or DiskANN behavior.
 
-See [`cli/RUNBOOK.md`](cli/RUNBOOK.md). **No paid service creation** without verifying plan/billing.
+## Live Tiger Cloud (owner)
+
+1. `export TIGER_DB_URL` or `TIGER_SERVICE_NAME` — see `.env.example`
+2. `python3 scripts/embed_semantic.py`
+3. `./scripts/run_live.sh`
+4. `tiger db query ... -f queries/similarity_filtered_metadata.sql` (redact secrets in screenshots)
+
+Billing/plan: see `cli/RUNBOOK.md` — shared CPU flags are not a zero-cost guarantee.
 
 ## Layout
 
 ```
-sql/00–05 + generated 04b_import_alert_embeddings.sql
-data/   device_events_sample.csv, alert_embeddings_sample.csv, query_vectors.json
-queries/ verification + similarity (generated vector literals)
-cli/    RUNBOOK.md
-tests/  static SQL invariants + embedding unit tests (MOCK)
+sql/00–05, 04b_import_alert_embeddings.sql (generated)
+scripts/embed_semantic.py, fixtures.py, validate_embedding_csv.py
+queries/verify_*.sql, similarity_*.sql (query literals generated)
+cli/RUNBOOK.md
+data/device_events_sample.csv, alert_embeddings_sample.csv
+tests/   SQL invariants + optional semantic quality test
 ```
 
-Honest status: [`STATUS.md`](STATUS.md). Portable archive: [`docs/ARTIFACTS.md`](docs/ARTIFACTS.md).
+See also: [`docs/CHALLENGES.md`](docs/CHALLENGES.md), [`data/README-embeddings.md`](data/README-embeddings.md), [`STATUS.md`](STATUS.md).

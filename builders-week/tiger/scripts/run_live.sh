@@ -30,7 +30,7 @@ SQL_FILES=(
 )
 
 if [[ ! -f "$ROOT/sql/04b_import_alert_embeddings.sql" ]]; then
-  echo "ERROR: missing sql/04b_import_alert_embeddings.sql — run: python3 scripts/gen_deterministic_embeddings.py" >&2
+  echo "ERROR: missing sql/04b_import_alert_embeddings.sql — run: python3 scripts/embed_semantic.py" >&2
   exit 1
 fi
 

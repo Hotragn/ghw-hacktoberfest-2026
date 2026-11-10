@@ -1,17 +1,19 @@
-# Cursor Challenge 1 — tip calculator
+# Cursor Challenge 1 — mini app (tip calculator)
 
-Single-file mini app: open [`index.html`](index.html) in a browser (no build, no APIs).
+**Requirement:** A small app built with Cursor (example: tip calculator).
+
+| File | Role |
+|------|------|
+| `index.html` | Single-file bill + tip % + split; updates live (HTML + JS, no APIs) |
 
 ## Scaffold provenance
 
-This folder was scaffolded by a **Cursor cloud agent** on branch `cursor/builders-week-nov10`.
+Built on branch `cursor/builders-week-nov10` by a **Cursor cloud agent**.
 
-**Scaffold prompt used:**
+**Scaffold prompt:**
 
 > Build a single-file HTML+JavaScript tip calculator for a restaurant bill: inputs for bill amount, tip percentage, and number of people; show tip, total, and per-person amount; accessible labels; no external APIs or frameworks.
 
-## Try it
+## Run
 
-```bash
-xdg-open builders-week/cursor-mini-app/index.html   # or open in browser from file menu
-```
+Open `index.html` in any browser (double-click or `xdg-open index.html`).

@@ -10,7 +10,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(__file__).resolve().parents[1] / "scripts"))
 
 from validate_embedding_csv import parse_vector_literal  # noqa: E402
-from gen_deterministic_embeddings import DIM  # noqa: E402
+from fixtures import DIM  # noqa: E402
 
 
 class TestParseVectorLiteral(unittest.TestCase):

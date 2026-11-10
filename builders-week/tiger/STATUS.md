@@ -1,39 +1,21 @@
-# Builders Week Tiger — status (2026-11-08, post-review fixes)
+# Tiger sample — status
 
-## Local preparation (this VM)
+## Local (this branch)
 
-- [x] Round-2 review: no DROP/DELETE in fixture path; typmod without -4; nullable fixture_batch; ON CONFLICT upserts
-- [x] Review P1/P2 SQL fixes applied under `builders-week/tiger/` only
-- [x] 256-d non-semantic lexical embedding pipeline + `validate_embedding_csv.py`
-- [x] 14 mock unittest tests + `verify_local.sh` (CSV/generator sync)
-- [x] `__pycache__` removed; `.gitignore` added
-- [ ] **No further pushes** until direct user approval (earlier push may exist on origin; new commits local-only)
-- [ ] **No live Tiger Cloud execution** in this environment
+- Challenges **1/3/5** SQL + CLI runbook
+- Challenge **5:** **384-d semantic** embeddings via `all-MiniLM-L6-v2` (`embed_semantic.py`)
+- Mock tests: SQL invariants + optional semantic similarity test (skips if model missing)
+- Idempotent fixtures: `ON CONFLICT` only — no `DROP`/`DELETE` in bundle
 
-## NOT claimed complete
+## Not claimed without owner live run
 
-- Tiger Cloud quickstart / hypertable live proof (Challenge 1)
-- Tiger CLI live query output (Challenge 3)
-- pgvectorscale DiskANN live proof (Challenge 5)
-- Semantic / model-generated embeddings (Challenge 5 AI wording)
+- Tiger Cloud hypertable/cagg refresh proof
+- pgvectorscale DiskANN on your service (fallback HNSW is SQL-only prep)
+- MLH submissions
 
-Deterministic 256-d hashes exercise pgvector operators only.
+## Regenerate embeddings
 
-## Mock test results (this VM)
-
+```bash
+pip install -r requirements-embed.txt
+python3 scripts/embed_semantic.py
 ```
-python3 -m unittest discover -s tests -p 'test_*.py' -v  → 22 tests OK (static/mock only)
-./scripts/verify_local.sh                                 → OK
-```
-
-## Remaining gates (user / live)
-
-1. Approve git push and Tiger Cloud sign-in
-2. Confirm free plan; use existing service OR `tiger service create ... --region us-east-1 --cpu shared --memory shared`
-3. `export TIGER_SERVICE_NAME=...` → `./scripts/run_live.sh`
-4. Run `queries/verify_*.sql` and similarity queries; save redacted output
-5. Optionally swap in vetted external embedding CSV after validation
-
-## Portable artifact
-
-See [`docs/ARTIFACTS.md`](docs/ARTIFACTS.md) for tarball path on this VM.

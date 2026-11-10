@@ -1,18 +1,15 @@
-# Embeddings in this sample
+# Embeddings (Challenge 5)
 
-## Default (committed)
+| Property | Value |
+|----------|--------|
+| Model | `sentence-transformers/all-MiniLM-L6-v2` (384 dimensions) |
+| Runtime | Local CPU; downloads once from Hugging Face (no paid embedding API) |
+| Regenerate | `pip install -r requirements-embed.txt && python3 scripts/embed_semantic.py` |
 
-- **256-dimensional** vectors from `scripts/gen_deterministic_embeddings.py`
-- Method: **lexical feature hashing** (character trigrams + salted per-dimension hashes)
-- **NON-SEMANTIC** — does not use any ML model or API; does **not** satisfy “AI semantic embedding” completion by itself
-- Regenerate: `python3 scripts/gen_deterministic_embeddings.py` (updates CSV, `sql/04b_*.sql`, and `queries/similarity_*.sql`)
+Generated artifacts:
 
-## Optional external embeddings
+- `alert_embeddings_sample.csv`
+- `sql/04b_import_alert_embeddings.sql`
+- `data/query_vectors.json` + `queries/similarity_*.sql`
 
-You may replace fixtures with a **vetted CSV** from your own offline embedding pipeline:
-
-```bash
-python3 scripts/validate_embedding_csv.py path/to/your.csv
-```
-
-Required `embedding` width: **256** (or pass `--dim` if you change schema consistently). Never commit secrets or API keys.
+Validate external CSV (same schema): `python3 scripts/validate_embedding_csv.py your.csv`
