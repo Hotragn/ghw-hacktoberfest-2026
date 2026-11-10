@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Tip Calculator — Cursor Challenge 1</title>
+  <style>
+    :root { font-family: system-ui, sans-serif; color-scheme: light dark; }
+    body { max-width: 22rem; margin: 2rem auto; padding: 0 1rem; }
+    label { display: block; margin-top: 0.75rem; font-weight: 600; }
+    input { width: 100%; padding: 0.5rem; margin-top: 0.25rem; box-sizing: border-box; }
+    output { display: block; margin-top: 1.25rem; font-size: 1.25rem; }
+  </style>
+</head>
+<body>
+  <h1>Tip calculator</h1>
+  <p>Cursor Challenge 1 — single-file HTML + JS (no APIs).</p>
+
+  <label for="bill">Bill amount ($)</label>
+  <input id="bill" type="number" min="0" step="0.01" value="42.50" />
+
+  <label for="tipPct">Tip (%)</label>
+  <input id="tipPct" type="number" min="0" max="100" step="1" value="18" />
+
+  <label for="people">Split between (people)</label>
+  <input id="people" type="number" min="1" step="1" value="1" />
+
+  <output id="out" aria-live="polite"></output>
+
+  <script>
+    function money(n) {
+      return Number.isFinite(n) ? "$" + n.toFixed(2) : "—";
+    }
+    function recalc() {
+      const bill = parseFloat(document.getElementById("bill").value) || 0;
+      const tipPct = parseFloat(document.getElementById("tipPct").value) || 0;
+      const people = Math.max(1, Math.floor(parseFloat(document.getElementById("people").value) || 1));
+      const tip = bill * (tipPct / 100);
+      const total = bill + tip;
+      const perPerson = total / people;
+      document.getElementById("out").textContent =
+        `Tip: ${money(tip)} · Total: ${money(total)} · Each pays: ${money(perPerson)}`;
+    }
+    ["bill", "tipPct", "people"].forEach((id) =>
+      document.getElementById(id).addEventListener("input", recalc)
+    );
+    recalc();
+  </script>
+</body>
+</html>
