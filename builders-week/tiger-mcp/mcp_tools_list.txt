@@ -1,0 +1,134 @@
+Tiger MCP tools list — recorded 2026-11-10 03:13:46 PM EST (America/Detroit)
+Source: MCP tools/list over stdio (tiger mcp start stdio)
+Server framing: ndjson
+Tool count: 19
+
+- db_query
+    title: Execute SQL Query
+    readOnlyHint: False    destructiveHint: True
+    description: Execute SQL queries against a service database.
+    required: service_id
+    properties: service_id, query, file, parameters, timeout_seconds, role, pooled
+
+- db_schema
+    title: Show Database Schema
+    readOnlyHint: True    destructiveHint: None
+    description: Display the schema of a service database.
+    required: service_id
+    properties: service_id, schema, internal, definitions, comments, role, pooled
+
+- feedback
+    title: Submit Feedback
+    readOnlyHint: False    destructiveHint: False
+    description: Submit feedback or a bug report to the Tiger Data team.
+    required: message
+    properties: message
+
+- search_docs
+    title: Search Documentation
+    readOnlyHint: True    destructiveHint: None
+    description: Search documentation with hybrid semantic (vector) and keyword (BM25) search. Use semanticWeight to choose keyword-only (0), semantic-only (1), or a blend; mid values fuse rankings with RRF. Supports Tiger Cloud (TimescaleDB), PostgreSQL, a
+    required: source, query, limit, semanticWeight
+    properties: limit, query, semanticWeight, source
+
+- service_create
+    title: Create Database Service
+    readOnlyHint: False    destructiveHint: False
+    description: Create a new database service in Tiger Cloud with specified type, compute resources, region, and HA options.
+    properties: name, addons, region, cpu_memory, replicas, environment, wait, set_default, with_password
+
+- service_delete
+    title: Delete Database Service
+    readOnlyHint: False    destructiveHint: True
+    description: Delete a database service permanently.
+    required: service_id
+    properties: service_id
+
+- service_fork
+    title: Fork Database Service
+    readOnlyHint: False    destructiveHint: False
+    description: Fork an existing database service to create a new independent copy.
+    required: service_id, fork_strategy
+    properties: service_id, name, fork_strategy, target_time, cpu_memory, environment, wait, set_default, with_password
+
+- service_get
+    title: Get Service Details
+    readOnlyHint: True    destructiveHint: None
+    description: Get detailed information for a specific database service. Returns connection endpoints, replica configuration, resource allocation, creation time, and status.
+    required: service_id
+    properties: service_id, with_password
+
+- service_list
+    title: List Database Services
+    readOnlyHint: True    destructiveHint: None
+    description: List all database services in your Tiger Cloud project. Returns services with status, type, region, and resource allocation.
+
+- service_logs
+    title: Get Service Logs
+    readOnlyHint: True    destructiveHint: None
+    description: View logs for a database service.
+    required: service_id
+    properties: service_id, node, tail, since, until
+
+- service_metrics_available
+    title: List Available Metric Series
+    readOnlyHint: True    destructiveHint: None
+    description: List the names of all metric series available for a service, for monitoring, debugging, and performance investigation. Available metrics span hardware/resource usage (CPU, memory, disk, network), PostgreSQL settings, PgBouncer connection-po
+    required: service_id
+    properties: service_id
+
+- service_metrics_details
+    title: Get Metric Details
+    readOnlyHint: True    destructiveHint: None
+    description: Get descriptive metadata for a metric: what it measures, its type, default
+    required: service_id, metric_name
+    properties: service_id, metric_name
+
+- service_metrics_series
+    title: Get Metric Series Data
+    readOnlyHint: True    destructiveHint: None
+    description: Fetch time-series data for a named metric over a specified time window, for monitoring, debugging, and performance investigation.
+    required: service_id, metric_name, from, to
+    properties: service_id, metric_name, from, to, role, filters, bucket_seconds, fn, group_by
+
+- service_rename
+    title: Rename Database Service
+    readOnlyHint: False    destructiveHint: False
+    description: Rename a database service. Only the display name changes: the service ID, endpoints, and data are untouched, so existing connections and connection strings keep working.
+    required: service_id, name
+    properties: service_id, name
+
+- service_resize
+    title: Resize Database Service
+    readOnlyHint: False    destructiveHint: False
+    description: Resize a database service by changing its CPU and memory allocation.
+    required: service_id, cpu_memory
+    properties: service_id, cpu_memory, wait
+
+- service_start
+    title: Start Database Service
+    readOnlyHint: False    destructiveHint: False
+    description: Start a stopped database service.
+    required: service_id
+    properties: service_id, wait
+
+- service_stop
+    title: Stop Database Service
+    readOnlyHint: False    destructiveHint: True
+    description: Stop a running database service.
+    required: service_id
+    properties: service_id, wait
+
+- service_update_password
+    title: Update Service Password
+    readOnlyHint: False    destructiveHint: True
+    description: Update the master password for the 'tsdbadmin' user of a database service.
+    required: service_id
+    properties: service_id, with_password
+
+- view_skill
+    title: View Skill
+    readOnlyHint: True    destructiveHint: None
+    description: Retrieve detailed skills for TimescaleDB operations and best practices.
+    required: skill_name, path
+    properties: path, skill_name

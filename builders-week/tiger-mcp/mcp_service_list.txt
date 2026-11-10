@@ -1,0 +1,37 @@
+Recorded: 2026-11-10 03:13:46 PM EST (America/Detroit)
+Tool: service_list
+Arguments: {}
+
+Result (redacted):
+{"services":[{"created":"2026-10-15T08:32:57Z","environment":"DEV","id":"vum48trstx","name":"ghw-tiger","region":"us-east-1","resources":{"cpu":"shared","memory":"shared"},"status":"READY","type":"TIMESCALEDB"}]}
+
+Raw JSON-RPC (redacted):
+{
+  "jsonrpc": "2.0",
+  "id": 3,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"services\":[{\"created\":\"2026-10-15T08:32:57Z\",\"environment\":\"DEV\",\"id\":\"vum48trstx\",\"name\":\"ghw-tiger\",\"region\":\"us-east-1\",\"resources\":{\"cpu\":\"shared\",\"memory\":\"shared\"},\"status\":\"READY\",\"type\":\"TIMESCALEDB\"}]}"
+      }
+    ],
+    "structuredContent": {
+      "services": [
+        {
+          "created": "2026-10-15T08:32:57Z",
+          "environment": "DEV",
+          "id": "vum48trstx",
+          "name": "ghw-tiger",
+          "region": "us-east-1",
+          "resources": {
+            "cpu": "shared",
+            "memory": "shared"
+          },
+          "status": "READY",
+          "type": "TIMESCALEDB"
+        }
+      ]
+    }
+  }
+}

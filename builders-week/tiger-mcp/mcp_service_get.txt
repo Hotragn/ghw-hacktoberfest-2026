@@ -1,0 +1,41 @@
+Recorded: 2026-11-10 03:13:46 PM EST (America/Detroit)
+Tool: service_get
+Arguments: {
+  "service_id": "vum48trstx",
+  "with_password": false
+}
+
+Result (redacted):
+{"service":{"connection_string":"[REDACTED]","created":"2026-10-15T08:32:57Z","direct_endpoint":"[REDACTED_ENDPOINT]","environment":"DEV","id":"vum48trstx","name":"ghw-tiger","region":"us-east-1","replicas":0,"resources":{"cpu":"shared","memory":"shared"},"status":"READY","type":"TIMESCALEDB"}}
+
+Raw JSON-RPC (redacted):
+{
+  "jsonrpc": "2.0",
+  "id": 4,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "{\"service\":{\"connection_string\":\"postgresql://[REDACTED]",\"created\":\"2026-10-15T08:32:57Z\",\"direct_endpoint\":\"[REDACTED_ENDPOINT]\",\"environment\":\"DEV\",\"id\":\"vum48trstx\",\"name\":\"ghw-tiger\",\"region\":\"us-east-1\",\"replicas\":0,\"resources\":{\"cpu\":\"shared\",\"memory\":\"shared\"},\"status\":\"READY\",\"type\":\"TIMESCALEDB\"}}"
+      }
+    ],
+    "structuredContent": {
+      "service": {
+        "connection_string": "[REDACTED]",
+        "created": "2026-10-15T08:32:57Z",
+        "direct_endpoint": "[REDACTED_ENDPOINT]",
+        "environment": "DEV",
+        "id": "vum48trstx",
+        "name": "ghw-tiger",
+        "region": "us-east-1",
+        "replicas": 0,
+        "resources": {
+          "cpu": "shared",
+          "memory": "shared"
+        },
+        "status": "READY",
+        "type": "TIMESCALEDB"
+      }
+    }
+  }
+}

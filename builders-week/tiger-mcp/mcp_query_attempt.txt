@@ -1,0 +1,28 @@
+Recorded: 2026-11-10 03:14:06 PM EST (America/Detroit)
+Tool: db_query
+Arguments: {
+  "service_id": "vum48trstx",
+  "query": "select now(), version();",
+  "timeout_seconds": 20
+}
+
+Succeeded: False
+
+Result / error (redacted, exact text):
+[isError=true]
+failed to connect to database: failed to connect to `user=tsdbadmin database=tsdb`: 198.18.0.1:33225 ([REDACTED_ENDPOINT]): tls error: timeout: context deadline exceeded
+
+Raw JSON-RPC or exception (redacted):
+{
+  "jsonrpc": "2.0",
+  "id": 5,
+  "result": {
+    "content": [
+      {
+        "type": "text",
+        "text": "failed to connect to database: failed to connect to `user=tsdbadmin database=tsdb`: 198.18.0.1:33225 ([REDACTED_ENDPOINT]): tls error: timeout: context deadline exceeded"
+      }
+    ],
+    "isError": true
+  }
+}
